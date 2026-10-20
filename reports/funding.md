@@ -1,5 +1,7 @@
 # 资金费率策略
 
+> 更新：补上 2025–2026 数据并细化成本、杠杆、基差后的结果见 [carry.md](carry.md)。2026 年期现套利已跑输美债。
+
 由 `python -m money_seeker funding --out-dir reports` 生成。完整数字见以下文件：
 - `funding_carry_yearly.csv`：常开期现套利的逐年收益；
 - `funding_carry_grid.csv`：开关条件的参数扫描；

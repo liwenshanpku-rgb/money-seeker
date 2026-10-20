@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from . import data
@@ -364,6 +365,122 @@ def _cmd_onchain(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_carry(args: argparse.Namespace) -> None:
+    from . import carry as C
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    new = {v: C.load_new_funding(v, args.data_dir, args.refresh) for v in C.NEW_VENUES}
+    price = {c: data.load_or_fetch_coinmetrics(c.lower(), args.data_dir)["close"] for c in ("BTC", "ETH")}
+
+    # 1. BTC / ETH 逐段净收益：不同交易所 × 账户模式 × 空单杠杆
+    segments = [("2020", "2020-01-01", "2020-12-31"), ("2021", "2021-01-01", "2021-12-31"),
+                ("2022", "2022-01-01", "2022-12-31"), ("2023", "2023-01-01", "2023-12-31"),
+                ("2025H2", "2025-08-21", "2025-12-31"), ("2026", "2026-01-01", "2026-12-31")]
+    modes = [("unified", 1.0), ("separate", 1.0), ("separate", 2.0), ("separate", 3.0)]
+    rows, curves = [], {}
+    for coin in ("BTC", "ETH"):
+        for venue in ("binance", "bybit", "gate", "hyperliquid"):
+            old = C.old_daily(coin, venue, args.data_dir) if venue != "hyperliquid" else None
+            nd = (C.new_daily(new[venue], coin + ("USDT" if venue != "hyperliquid" else ""))
+                  if venue in C.NEW_VENUES else None)
+            for seg, s, e in segments:
+                dd = old if seg < "2024" else nd
+                if dd is None or dd.loc[s:e]["coverage"].sum() < 30:
+                    continue
+                for mode, lev in modes:
+                    if venue == "hyperliquid" and mode == "unified":
+                        continue  # 现货腿在别的交易所，无法统一保证金
+                    r = C.simulate_carry(dd, price[coin], venue=venue, mode=mode, leverage=lev,
+                                         band=args.band, start=s, end=e)
+                    label = mode if mode == "unified" else f"separate L{lev:.0f}"
+                    rows.append({"coin": coin, "venue": venue, "period": seg, "mode": label,
+                                 **{k: v for k, v in r.items() if k != "equity"},
+                                 "excess_vs_tbill": r["net_apr"] - r["tbill_apr"],
+                                 "liquidated": r["worst_liq_distance_used"] >= 1.0})
+    yearly = pd.DataFrame(rows)
+    yearly.to_csv(out / "carry_yearly.csv", index=False)
+
+    # 2. 2025-08 起各币各交易所的资金费率横截面
+    rows = []
+    for v, df in new.items():
+        sums, cov = C.funding_panel(df, "USDC" if v == "hyperliquid" else "USDT")
+        for coin in sums.columns:
+            ok = cov[coin] >= 0.99
+            x = sums[coin][ok]
+            if len(x) < 200:
+                continue
+            rows.append({"venue": v, "coin": coin, "days": len(x), "funding_apr": x.mean() * 365,
+                         "funding_apr_2026": x.loc["2026"].mean() * 365,
+                         "negative_day_share": float((x < 0).mean()),
+                         "worst_month_apr": float(x.resample("ME").mean().min() * 365)})
+    cross = pd.DataFrame(rows)
+    cross.to_csv(out / "carry_cross_section.csv", index=False)
+
+    # 3. 轮动 vs 只做 BTC（名义 1 倍，含手续费 + 滑点）
+    rows = []
+    for v in C.NEW_VENUES:
+        sums, cov = C.funding_panel(new[v], "USDC" if v == "hyperliquid" else "USDT")
+        full = [c for c in sums.columns if (cov[c] >= 0.99).sum() >= 200]
+        variants = [("BTC only", ["BTC"], 1, 1, 0.0002), ("ETH only", ["ETH"], 1, 1, 0.0002),
+                    ("equal weight", full, len(full), 1, 0.0005)]
+        variants += [(f"top3 every {w}w", full, 3, w, 0.0005) for w in (1, 4, 13)]
+        for name, uni, k, w, slip in variants:
+            r = C.rotation_carry(sums, cov, top_k=k, universe=uni, venue=v, nf=1.0,
+                                 slippage=slip, every_weeks=w)
+            rr = r["ret"].dropna()
+            rows.append({"venue": v, "strategy": name, "days": len(rr),
+                         "net_apr_notional_1x": rr.mean() * 365,
+                         "worst_week": rr.rolling(7).sum().min()})
+    rotation = pd.DataFrame(rows)
+    rotation.to_csv(out / "carry_rotation.csv", index=False)
+
+    # 4. 基差（Binance 标记价格 vs Coin Metrics 现货，00:00 UTC）与空单安全杠杆
+    rows = []
+    b = new["binance"]
+    for coin in ("BTC", "ETH"):
+        mark = b[(b["symbol"] == coin + "USDT") & (b["ts"].dt.hour == 0)].set_index("ts")["mark_price"]
+        spot = price[coin].copy()
+        spot.index = spot.index + pd.Timedelta(days=1)  # Coin Metrics 的 D 日价格是 D+1 日 00:00 UTC
+        j = pd.concat([mark, spot], axis=1, join="inner").dropna()
+        basis = j.iloc[:, 0] / j.iloc[:, 1] - 1
+        rise = C.max_daily_rise(price[coin].loc["2020":])
+        rows.append({"coin": coin, "basis_mean": basis.mean(), "basis_std": basis.std(),
+                     "basis_p01": basis.quantile(0.01), "basis_p99": basis.quantile(0.99),
+                     "max_1d_rise_2020_2026": rise,
+                     "safe_leverage_band10": C.safe_leverage(rise, args.band)})
+    for coin, g in b[b["quote"] == "USDT"].groupby("coin"):
+        if coin in ("BTC", "ETH"):
+            continue
+        p = g.set_index("ts")["mark_price"].resample("D").last().dropna()
+        rise = C.max_daily_rise(p)
+        rows.append({"coin": coin, "max_1d_rise_2020_2026": np.nan, "max_1d_rise_since_2025_08": rise,
+                     "safe_leverage_band10": C.safe_leverage(rise, args.band)})
+    risk = pd.DataFrame(rows)
+    risk.to_csv(out / "carry_risk.csv", index=False)
+
+    # 2025-08 起连续持有（只建仓、平仓各一次）的 BTC 权益曲线
+    for venue, mode in (("binance", "unified"), ("bybit", "unified"), ("hyperliquid", "separate")):
+        nd = C.new_daily(new[venue], "BTC" + ("USDT" if venue != "hyperliquid" else ""))
+        r = C.simulate_carry(nd, price["BTC"], venue=venue, mode=mode, leverage=1.0, band=args.band)
+        curves[f"BTC {venue} {mode}" + (" L1" if mode == "separate" else "")] = r["equity"]
+    eq = curves
+    first = min(s.index[0] for s in eq.values())
+    tb = pd.Series([C.tbill_rate(d) / 365 for d in pd.date_range(first, max(s.index[-1] for s in eq.values()))],
+                   index=pd.date_range(first, max(s.index[-1] for s in eq.values())))
+    eq["T-bill"] = (1 + tb).cumprod()
+    plot_equity({k: v / v.iloc[0] for k, v in eq.items()}, out / "carry_btc_recent.png",
+                title="BTC cash-and-carry since 2025-08 (net of costs; gaps skipped)")
+
+    with pd.option_context("display.width", 250, "display.max_columns", 30, "display.precision", 4):
+        pv = yearly[yearly["mode"].isin(["unified", "separate L1", "separate L3"])].pivot_table(
+            index=["coin", "venue", "mode"], columns="period", values="net_apr")
+        print((pv * 100).round(1).to_string())
+        print(rotation.to_string(index=False))
+        print(risk.to_string(index=False))
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -451,6 +568,13 @@ def build_parser() -> argparse.ArgumentParser:
     oc.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
     oc.add_argument("--out-dir", default="output/onchain", help="结果输出目录")
     oc.set_defaults(func=_cmd_onchain)
+
+    ca = sub.add_parser("carry", help="期现套利细化：2025–2026 新数据、账户模式、杠杆、基差、轮动")
+    ca.add_argument("--band", type=float, default=0.10, help="分账户模式下价格偏离多少就调仓，默认 0.10")
+    ca.add_argument("--data-dir", default="data", help="数据缓存目录")
+    ca.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
+    ca.add_argument("--out-dir", default="output/carry", help="结果输出目录")
+    ca.set_defaults(func=_cmd_carry)
     return p
 
 

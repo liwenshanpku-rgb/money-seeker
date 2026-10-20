@@ -14,6 +14,7 @@ money_seeker/
   rotation.py   # 横截面动量轮动：组合回测引擎、参数扫描、随机选币安慰剂
   funding.py    # 资金费率：期现套利、资金费率择时
   onchain.py    # 链上数据：MVRV、Puell、算力、交易所余额、活跃地址
+  carry.py      # 期现套利细化：新数据、账户模式、杠杆与强平、基差、轮动
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -154,6 +155,16 @@ python -m money_seeker onchain --out-dir reports
 结论见 [`reports/onchain.md`](reports/onchain.md)：**没有可靠的盈利策略**。
 - 链上活动类信号样本外失败；
 - MVRV 类估值信号事后很漂亮，但样本外只有 1 笔交易，而且周期顶部在逐轮降低，固定卖出阈值已经失效。
+
+### 8. 期现套利细化（含 2025–2026 数据）
+
+```bash
+python -m money_seeker carry --out-dir reports
+```
+
+补上 2025-08 ~ 2026-10 的 Binance / Bybit / Hyperliquid 资金费率（GitHub 公开数据），并细化以下几项：手续费与滑点、统一账户和分账户的资金利用率、空单强平风险、基差、各币横截面与轮动，与美债对比。
+结论见 [`reports/carry.md`](reports/carry.md)：**2026 年 BTC/ETH 期现套利扣成本后年化约 1–2%，低于美债的 3.6–3.9%**；换山寨币或轮动更差。
+2024-01 ~ 2025-08 没有可用的公开数据。
 
 ## 测试
 

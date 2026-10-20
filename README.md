@@ -6,12 +6,15 @@
 
 ```
 money_seeker/
-  data.py       # 从 Binance 公共接口拉日线（自动分页）、CSV 缓存、离线模拟数据
+  data.py       # Binance 日线（自动分页）、Coin Metrics 收盘价、CSV 缓存、周线聚合、模拟数据
   strategy.py   # 网格策略回测 + 买入持有基准
+  signals.py    # 动量 / 均线 / 突破 / 均值回归等择时信号 + 按仓位回测
+  research.py   # 多策略样本内选参、样本外检验、跨币种验证
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
 tests/          # pytest 单元测试
+reports/        # 研究报告与图表
 ```
 
 ## 安装
@@ -96,6 +99,16 @@ CSV 需要包含 `date,open,high,low,close` 列（`volume` 可选）。
 
 - 夏普比率 = 日超额收益均值 / 日超额收益标准差 × √365
 - 最大回撤 = 权益相对历史最高点的最大跌幅
+
+### 3. 多策略研究（样本内选参 → 样本外检验）
+
+```bash
+python -m money_seeker research --out-dir reports
+```
+
+使用 Coin Metrics 公开的每日收盘价（托管在 GitHub，无需 API Key），比较网格、时间序列动量、均线交叉、趋势过滤、唐奇安突破、RSI 回归、布林带回归七类策略，日线和周线两个周期都跑。
+流程是：在 BTC 2016–2021 上选参数，在 2022 年至今的 BTC 上检验，再把同一组参数搬到 ETH 上验证。
+结论和图表见 [`reports/README.md`](reports/README.md)。
 
 ## 测试
 

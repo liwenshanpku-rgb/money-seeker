@@ -1,8 +1,9 @@
-"""日线 K 线数据：从 Binance 公共行情接口拉取、本地 CSV 缓存、离线模拟数据。"""
+"""日线数据：Binance 公共行情接口、Coin Metrics 收盘价、本地 CSV 缓存、周期聚合、离线模拟数据。"""
 
 from __future__ import annotations
 
 import time
+from io import StringIO
 from pathlib import Path
 
 import numpy as np
@@ -138,3 +139,46 @@ def synthetic_daily(
         {"open": open_, "high": high, "low": low, "close": close, "volume": volume},
         index=index,
     )
+
+
+# Coin Metrics 社区版每日数据（托管在 GitHub），只有收盘价 PriceUSD，
+# 从比特币早期一直覆盖到最近，适合做长周期研究。
+COINMETRICS_URL = "https://raw.githubusercontent.com/coinmetrics/data/master/csv/{asset}.csv"
+
+
+def fetch_coinmetrics_daily(asset: str = "btc") -> pd.DataFrame:
+    """拉取 Coin Metrics 每日 USD 收盘价，返回 open=high=low=close 的“只有收盘价”日线。"""
+    url = COINMETRICS_URL.format(asset=asset.lower())
+    resp = requests.get(url, timeout=120)
+    resp.raise_for_status()
+    raw = pd.read_csv(StringIO(resp.text), usecols=["time", "PriceUSD"])
+    raw = raw.dropna()
+    close = raw.set_index(pd.to_datetime(raw["time"]).rename("date"))["PriceUSD"].astype(float)
+    return close_only(close)
+
+
+def load_or_fetch_coinmetrics(
+    asset: str, data_dir: str | Path = "data", refresh: bool = False
+) -> pd.DataFrame:
+    path = Path(data_dir) / f"coinmetrics_{asset.lower()}_1d.csv"
+    if path.exists() and not refresh:
+        return load_csv(path)
+    df = fetch_coinmetrics_daily(asset)
+    save_csv(df, path)
+    return df
+
+
+def close_only(close: pd.Series) -> pd.DataFrame:
+    """把收盘价序列变成 open=high=low=close 的 K 线，回测时不使用任何日内信息。"""
+    close = close.sort_index()
+    return pd.DataFrame(
+        {"open": close, "high": close, "low": close, "close": close, "volume": np.nan},
+        index=close.index.rename("date"),
+    )
+
+
+def resample(df: pd.DataFrame, rule: str = "W-SUN") -> pd.DataFrame:
+    """日线聚合为更大周期（默认周线，周日收盘）。"""
+    agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    out = df.resample(rule).agg({k: v for k, v in agg.items() if k in df.columns})
+    return out.dropna(subset=["close"])

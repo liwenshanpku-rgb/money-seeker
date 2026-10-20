@@ -6,6 +6,8 @@ import argparse
 import json
 from pathlib import Path
 
+import pandas as pd
+
 from . import data
 from .metrics import summarize
 from .plot import plot_equity
@@ -89,6 +91,30 @@ def _cmd_backtest(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}  (收益曲线图 {png.name})")
 
 
+def _cmd_research(args: argparse.Namespace) -> None:
+    from .research import best_equities, run_research
+
+    assets = [a.lower() for a in args.assets]
+    daily = {a: data.load_or_fetch_coinmetrics(a, args.data_dir, args.refresh) for a in assets}
+    is_period = (args.is_start, args.is_end)
+    oos_period = (args.oos_start, args.oos_end)
+    table = run_research(daily, assets[0], is_period, oos_period)
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_csv(out / "research_table.csv", index=False)
+    for freq in ("D", "W"):
+        for a in assets:
+            curves = best_equities(daily, table, a, oos_period, freq)
+            plot_equity(curves, out / f"research_{freq}_{a}.png",
+                        title=f"{a.upper()} out-of-sample {args.oos_start} ~ "
+                        f"{args.oos_end or 'latest'} ({'daily' if freq == 'D' else 'weekly'} bars)")
+    with pd.option_context("display.width", 250, "display.max_columns", 30,
+                           "display.precision", 3):
+        print(table.to_string(index=False))
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -120,6 +146,18 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--risk-free", type=float, default=0.0, help="年化无风险利率，默认 0")
     b.add_argument("--out-dir", default="output", help="结果输出目录")
     b.set_defaults(func=_cmd_backtest)
+
+    r = sub.add_parser("research", help="多策略样本内选参 + 样本外检验（Coin Metrics 收盘价数据）")
+    r.add_argument("--assets", nargs="+", default=["btc", "eth"],
+                   help="币种，第一个用于选参数，其余用于交叉验证；默认 btc eth")
+    r.add_argument("--is-start", default="2016-01-01", help="样本内开始")
+    r.add_argument("--is-end", default="2021-12-31", help="样本内结束")
+    r.add_argument("--oos-start", default="2022-01-01", help="样本外开始")
+    r.add_argument("--oos-end", default=None, help="样本外结束，默认到最新")
+    r.add_argument("--data-dir", default="data", help="数据缓存目录")
+    r.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
+    r.add_argument("--out-dir", default="output/research", help="结果输出目录")
+    r.set_defaults(func=_cmd_research)
     return p
 
 

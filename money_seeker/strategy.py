@@ -5,7 +5,9 @@
 - 每格分配相同的计价币资金 per_grid；格子 i 的下沿是买入价、上沿是卖出价。
 - 开仓时，当前价下方的格子挂买单（空仓），上方的格子按开盘价直接买入（持仓），
   这样价格上涨时有币可卖。
-- 日线内部路径假设：阳线 open -> low -> high -> close，阴线 open -> high -> low -> close。
+- K 线内部路径假设：上一根收盘 -> 阳线 open -> low -> high -> close，
+  阴线 open -> high -> low -> close。只有收盘价的数据（open=high=low=close）
+  就退化为逐根收盘价之间的走势，不做任何日内假设。
   价格向下穿过空仓格的下沿则买入，向上穿过持仓格的上沿则卖出。
 - 价格跑出区间后不再成交（网格“破网”），持仓随行情浮动。
 """
@@ -51,8 +53,9 @@ class BacktestResult:
     stats: dict = field(default_factory=dict)
 
 
-def _bar_path(o: float, h: float, l: float, c: float) -> list[float]:
-    return [o, l, h, c] if c >= o else [o, h, l, c]
+def _bar_path(prev_c: float, o: float, h: float, l: float, c: float) -> list[float]:
+    # 从上一根收盘价出发，开盘跳空穿过的格子也要成交
+    return [prev_c, o, l, h, c] if c >= o else [prev_c, o, h, l, c]
 
 
 def run_grid_backtest(df: pd.DataFrame, config: GridConfig) -> BacktestResult:
@@ -93,8 +96,10 @@ def run_grid_backtest(df: pd.DataFrame, config: GridConfig) -> BacktestResult:
 
     equity = np.empty(len(df))
     bars = df[["open", "high", "low", "close"]].to_numpy(dtype=float)
+    prev_c = p0
     for t, (date, (o, h, l, c)) in enumerate(zip(df.index, bars)):
-        path = _bar_path(o, h, l, c)
+        path = _bar_path(prev_c, o, h, l, c)
+        prev_c = c
         for a, b in zip(path[:-1], path[1:]):
             if b < a:  # 下跌段：从高到低依次触发买单
                 for i in range(n - 1, -1, -1):

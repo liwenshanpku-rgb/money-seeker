@@ -1,0 +1,77 @@
+{
+  "universe": "25",
+  "n_assets": 25,
+  "selected_params": {
+    "lookback": 4,
+    "top_k": 3,
+    "filt": "btc_trend"
+  },
+  "IS": {
+    "total_ret": 45.71243315345745,
+    "ann_ret": 2.0779070166606015,
+    "sharpe": 1.7154613182769496,
+    "max_dd": -0.6483875681609279,
+    "turnover_yr": 25.542446090625557
+  },
+  "OOS": {
+    "total_ret": 0.848098929223974,
+    "ann_ret": 0.15009261758914527,
+    "sharpe": 0.5287929783119535,
+    "max_dd": -0.7046131603420482,
+    "turnover_yr": 27.441223287827807
+  },
+  "OOS_placebo_pctile": 0.99,
+  "OOS_random_median_sharpe": -0.003867426965504373,
+  "OOS_benchmarks": {
+    "equal weight all": {
+      "start": "2022-01-01",
+      "end": "2026-05-23",
+      "days": 1604,
+      "final_equity": 0.7135454920612891,
+      "total_return": -0.28645450793871086,
+      "annual_return": -0.07397140619351417,
+      "annual_volatility": 0.6484790483212668,
+      "sharpe": 0.20888504471637626,
+      "max_drawdown": -0.6860354654238396
+    },
+    "BTC buy & hold": {
+      "start": "2022-01-01",
+      "end": "2026-05-23",
+      "days": 1604,
+      "final_equity": 1.6110145394253546,
+      "total_return": 0.6110145394253546,
+      "annual_return": 0.1146952398187675,
+      "annual_volatility": 0.5129746142832842,
+      "sharpe": 0.4683282687212237,
+      "max_drawdown": -0.6686650930712517
+    }
+  },
+  "OOS_grid_profitable": "22/54",
+  "OOS_yearly_return": {
+    "2022": {
+      "rotation": -0.40226254144029283,
+      "equal weight all": -0.6859857596954945,
+      "BTC buy & hold": -0.652560669829665
+    },
+    "2023": {
+      "rotation": 0.21084401732090075,
+      "equal weight all": 0.8890152137770972,
+      "BTC buy & hold": 1.5548657912920194
+    },
+    "2024": {
+      "rotation": -0.06920670234608961,
+      "equal weight all": 0.7758678100303125,
+      "BTC buy & hold": 1.212127373688387
+    },
+    "2025": {
+      "rotation": 1.4435030679453589,
+      "equal weight all": -0.2137547445002448,
+      "BTC buy & hold": -0.0628843706946336
+    },
+    "2026": {
+      "rotation": 0.12269142696726032,
+      "equal weight all": -0.13847438446654825,
+      "BTC buy & hold": -0.12451425623907919
+    }
+  }
+}

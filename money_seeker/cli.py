@@ -167,6 +167,60 @@ def _cmd_universe(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_rotation(args: argparse.Namespace) -> None:
+    from .rotation import (
+        ROTATION_EXTRA_ASSETS, equal_weight_targets, placebo_pctile, price_panel, scan,
+        simulate, target_weights,
+    )
+    from .universe import EXTRA_ASSETS
+
+    assets = ["btc", "eth", *EXTRA_ASSETS]
+    if args.universe == "42":
+        assets += ROTATION_EXTRA_ASSETS
+    assets = [a for a in assets if a not in args.exclude]
+    daily = {a: data.load_or_fetch_coinmetrics(a, args.data_dir, args.refresh) for a in assets}
+    px = price_panel(daily)
+    is_period, oos_period = (args.is_start, args.is_end), (args.oos_start, None)
+    tag = f"{args.universe}" + (f"_ex_{'_'.join(args.exclude)}" if args.exclude else "")
+
+    res = scan(px, is_period, oos_period)
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    res.to_csv(out / f"rotation_scan_{tag}.csv", index=False)
+
+    # 只按样本内夏普选参数
+    best = res.sort_values("IS_sharpe", ascending=False).iloc[0]
+    params = dict(lookback=int(best["lookback_w"]), top_k=int(best["top_k"]), filt=best["filter"])
+    w = target_weights(px, **params)
+    pct, rand_median = placebo_pctile(px, w, *oos_period, n=args.placebo)
+
+    curves = {"rotation": simulate(px, w, *oos_period)["equity"],
+              "equal weight all": simulate(px, equal_weight_targets(px), *oos_period)["equity"]}
+    btc = px["btc"].loc[args.oos_start:]
+    curves["BTC buy & hold"] = btc / btc.iloc[0]
+    yearly = pd.DataFrame(curves).resample("YE").last()
+    yearly = pd.concat([pd.DataFrame(1.0, index=[curves["rotation"].index[0]], columns=yearly.columns),
+                        yearly]).pct_change().iloc[1:]
+    yearly.index = yearly.index.year
+
+    summary = {
+        "universe": tag, "n_assets": px.shape[1], "selected_params": params,
+        "IS": {k[3:]: float(best[k]) for k in best.index if k.startswith("IS_")},
+        "OOS": {k[4:]: float(best[k]) for k in best.index if k.startswith("OOS_")},
+        "OOS_placebo_pctile": pct, "OOS_random_median_sharpe": rand_median,
+        "OOS_benchmarks": {k: summarize(v) for k, v in curves.items() if k != "rotation"},
+        "OOS_grid_profitable": f"{int((res['OOS_total_ret'] > 0).sum())}/{len(res)}",
+        "OOS_yearly_return": {str(y): r.to_dict() for y, r in yearly.iterrows()},
+    }
+    (out / f"rotation_summary_{tag}.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False, default=str))
+    plot_equity(curves, out / f"rotation_{tag}.png",
+                title=f"Cross-sectional momentum ({px.shape[1]} coins, {tag}), out-of-sample, "
+                f"lookback={params['lookback']}w top{params['top_k']} {params['filt']}")
+    print(json.dumps(summary, indent=2, ensure_ascii=False, default=str))
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -221,6 +275,19 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
     u.add_argument("--out-dir", default="output/universe", help="结果输出目录")
     u.set_defaults(func=_cmd_universe)
+
+    ro = sub.add_parser("rotation", help="横截面动量轮动：样本内选参、样本外检验、随机选币安慰剂")
+    ro.add_argument("--universe", choices=("25", "42"), default="42",
+                    help="25 = BTC、ETH 加 23 个币；42 = 再加 17 个币（含崩盘币），默认 42")
+    ro.add_argument("--exclude", nargs="*", default=[], help="排除的币，例如 --exclude zec")
+    ro.add_argument("--is-start", default="2018-08-01", help="样本内开始")
+    ro.add_argument("--is-end", default="2021-12-31", help="样本内结束")
+    ro.add_argument("--oos-start", default="2022-01-01", help="样本外开始")
+    ro.add_argument("--placebo", type=int, default=300, help="随机选币次数，默认 300")
+    ro.add_argument("--data-dir", default="data", help="数据缓存目录")
+    ro.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
+    ro.add_argument("--out-dir", default="output/rotation", help="结果输出目录")
+    ro.set_defaults(func=_cmd_rotation)
     return p
 
 

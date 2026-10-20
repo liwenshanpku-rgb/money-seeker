@@ -11,6 +11,7 @@ money_seeker/
   signals.py    # 动量 / 均线 / 突破 / 均值回归等择时信号 + 按仓位回测
   research.py   # 多策略样本内选参、样本外检验、跨币种验证
   universe.py   # 多币种验证周线动量：逐币、安慰剂检验、等权组合
+  rotation.py   # 横截面动量轮动：组合回测引擎、参数扫描、随机选币安慰剂
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -119,6 +120,16 @@ python -m money_seeker universe --out-dir reports
 
 参数固定为周线 4 周动量，在另外 23 个币上逐币对比买入持有，同时做安慰剂检验（循环平移仓位、打乱择时）和等权组合回测。
 结论见 [`reports/universe.md`](reports/universe.md)：**多币种上没有通过**，它更适合作为减小回撤的风控层，而不是收益来源。
+
+### 5. 横截面动量轮动
+
+```bash
+python -m money_seeker rotation --universe 42 --out-dir reports            # 42 个币（含崩盘币）
+python -m money_seeker rotation --universe 25 --exclude zec --out-dir reports
+```
+
+每周持有过去 L 周涨幅前 K 名的币。在样本内选参数、样本外检验，并用随机选币做安慰剂对照。
+结论见 [`reports/rotation.md`](reports/rotation.md)：**样本外失败**。在幸存者偏差更小的 42 币池上亏 62%，54 组参数里只有 2 组盈利。
 
 ## 测试
 

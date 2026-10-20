@@ -1,1 +1,108 @@
 # money-seeker
+
+虚拟币日线数据拉取 + 现货网格策略回测的最小 Python 骨架。输出收益曲线图、夏普比率等指标，并与「买入持有」做对比。
+
+## 目录结构
+
+```
+money_seeker/
+  data.py       # 从 Binance 公共接口拉日线（自动分页）、CSV 缓存、离线模拟数据
+  strategy.py   # 网格策略回测 + 买入持有基准
+  metrics.py    # 夏普比率、最大回撤、年化收益/波动
+  plot.py       # 收益曲线图（matplotlib）
+  cli.py        # 命令行入口
+tests/          # pytest 单元测试
+```
+
+## 安装
+
+需要 Python 3.10+。
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt   # 只跑回测可用 requirements.txt
+```
+
+## 运行
+
+### 1. 离线演示（不需要联网）
+
+```bash
+python -m money_seeker backtest --demo
+```
+
+用几何布朗运动生成两年的模拟日线跑一遍，结果写到 `output/`。
+
+### 2. 拉真实数据并回测
+
+```bash
+# 只拉数据，保存到 data/BTCUSDT_1d.csv
+python -m money_seeker fetch --symbol BTCUSDT --start 2022-01-01
+
+# 回测（本地没有缓存或缓存不够时会自动拉取）
+python -m money_seeker backtest --symbol BTCUSDT --start 2023-01-01 \
+    --lower 20000 --upper 80000 --grids 30 --geometric
+```
+
+数据来自 Binance 公共行情接口（`data-api.binance.vision`，主站 `api.binance.com` 作备用），无需 API Key。
+所在网络访问不了 Binance 时，可以自己准备 CSV：
+
+```bash
+python -m money_seeker backtest --csv path/to/ETHUSDT.csv
+```
+
+CSV 需要包含 `date,open,high,low,close` 列（`volume` 可选）。
+
+### 常用参数
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--symbol` | `BTCUSDT` | Binance 交易对 |
+| `--start` / `--end` | `2023-01-01` / 昨天 | 回测区间 |
+| `--lower` / `--upper` | 首日开盘价 ±`--range-pct` | 网格上下沿 |
+| `--range-pct` | `0.3` | 未指定上下沿时的区间宽度 |
+| `--grids` | `20` | 网格数量 |
+| `--geometric` | 关 | 等比网格（默认等差） |
+| `--capital` | `10000` | 初始资金（USDT） |
+| `--fee` | `0.001` | 单边手续费率 |
+| `--risk-free` | `0` | 年化无风险利率，用于夏普比率 |
+| `--out-dir` | `output` | 输出目录 |
+| `--refresh` | 关 | 忽略缓存重新拉数据 |
+
+`python -m money_seeker backtest -h` 查看全部参数。也可以 `pip install -e .` 后直接用 `money-seeker backtest ...`。
+
+### 输出
+
+终端会打印网格策略和买入持有的指标（总收益、年化收益、年化波动、夏普比率、最大回撤、成交笔数），`output/` 下生成：
+
+- `<SYMBOL>_equity.png`：收益曲线（上）与价格、网格区间（下）
+- `<SYMBOL>_equity.csv`：每日权益（网格 vs 买入持有）
+- `<SYMBOL>_trades.csv`：成交明细
+- `<SYMBOL>_stats.json`：参数和指标
+
+## 策略与指标说明
+
+**网格规则**（只做多现货，不加杠杆）：
+
+- 在 `[lower, upper]` 划 `n` 个格子，每格分到同样的资金。格子下沿是买入价，上沿是卖出价。
+- 开仓时，开盘价上方的格子直接按开盘价买入（之后价格上涨有币可卖），下方的格子挂买单等成交。
+- 价格向下穿过空仓格的下沿就买入，向上穿过持仓格的上沿就卖出，每次成交都扣手续费。
+- 价格跑出区间后不再成交，持仓随行情浮动。
+
+**日线内路径假设**：日线看不到盘中先到高点还是低点，这里假设阳线走 `开 → 低 → 高 → 收`，阴线走 `开 → 高 → 低 → 收`。这会让日内来回震荡的成交被低估或高估，想要更精确就换成小时线或分钟线。
+
+**指标**：加密货币全年交易，年化按 365 天。
+
+- 夏普比率 = 日超额收益均值 / 日超额收益标准差 × √365
+- 最大回撤 = 权益相对历史最高点的最大跌幅
+
+## 测试
+
+```bash
+python -m pytest
+```
+
+## 注意
+
+本项目仅用于学习和研究，回测结果不代表未来收益，也不构成投资建议。回测没有考虑滑点、挂单排队、交易所最小下单量等实盘因素。

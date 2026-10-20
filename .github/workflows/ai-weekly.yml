@@ -1,0 +1,97 @@
+# 每周一自动运行 AI 仓位顾问（模拟盘，只记录决定，不下单）。
+# 决策日志提交到 ai-journal 分支：ai_journal/decisions.jsonl、latest.md、review.txt、review.png。
+# 需要在仓库 Settings → Secrets and variables → Actions 中添加 ANTHROPIC_API_KEY。
+# GitHub 只运行默认分支（main）上的定时 workflow。
+name: AI weekly position advisor
+
+on:
+  schedule:
+    - cron: "30 0 * * 1"   # 每周一 00:30 UTC（北京时间 08:30，日线收盘后半小时）
+  workflow_dispatch:         # 也可以在 Actions 页面手动运行
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-weekly
+  cancel-in-progress: false
+
+env:
+  START_PCT: "100"           # 第一次运行时假设的起始仓位（护栏以此为基准）
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check API key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::缺少 ANTHROPIC_API_KEY：请在 Settings → Secrets and variables → Actions 中添加"
+            exit 1
+          fi
+
+      - name: Load journal branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin ai-journal >/dev/null; then
+            git fetch origin ai-journal
+            git worktree add -B ai-journal journal origin/ai-journal
+          else
+            git worktree add --detach journal
+            cd journal
+            git checkout --orphan ai-journal
+            git rm -rf --quiet .
+            cd ..
+          fi
+          mkdir -p journal/ai_journal
+
+      - name: Run AI advisor
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          J=journal/ai_journal/decisions.jsonl
+          EXTRA=""
+          if [ ! -s "$J" ]; then EXTRA="--current-pct $START_PCT"; fi
+          python -m money_seeker ai --journal "$J" $EXTRA | tee journal/ai_journal/latest.md
+
+      - name: Paper-trading review
+        continue-on-error: true   # 评估失败不能影响记录本周的决定
+        run: |
+          python -m money_seeker ai-review --journal journal/ai_journal/decisions.jsonl \
+            --plot journal/ai_journal/review.png | tee journal/ai_journal/review.txt
+
+      - name: Job summary
+        continue-on-error: true
+        run: |
+          {
+            echo '## AI 仓位决定'
+            echo '```'
+            cat journal/ai_journal/latest.md
+            echo '```'
+            echo '## 模拟盘'
+            echo '```'
+            cat journal/ai_journal/review.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit journal
+        run: |
+          cd journal
+          git add ai_journal
+          git commit -m "AI decision $(date -u +%F)"
+          git push origin ai-journal

@@ -93,6 +93,29 @@ python -m money_seeker ai-review --plot ai_review.png
 参考来源: ...
 ```
 
+## 每周一自动运行（GitHub Actions）
+
+工作流文件：`.github/workflows/ai-weekly.yml`。
+
+**运行时间与方式**：
+- 每周一 00:30 UTC（北京时间 08:30）运行，也可以在 Actions 页面手动运行；
+- 只记录决定，不下单；
+- 第一次运行时假设起始仓位为 100%（工作流里的 `START_PCT`），护栏以此为基准。
+
+**每次运行做的事**：
+1. 从 Binance 公开行情接口取日线，从 FRED 取美债利率。资金费率接口在 GitHub 的美国服务器上通常无法访问，会自动跳过，由 Claude 自己搜索；
+2. 运行 `python -m money_seeker ai`，再运行 `ai-review`；
+3. 把 `decisions.jsonl`（全部决定）、`latest.md`（本次决定）、`review.txt` / `review.png`（模拟盘对比）提交到 **`ai-journal` 分支**；
+4. 本次决定和模拟盘结果也会显示在 Actions 运行页面的 Summary 里。
+
+**需要你做的两件事**：
+1. **把代码合并到 `main`**：GitHub 只运行默认分支上的定时工作流，目前代码在 `claude/beautiful-tesla-fovtcf` 分支上；
+2. **添加 API key**：仓库 Settings → Secrets and variables → Actions → New repository secret，名称 `ANTHROPIC_API_KEY`。
+
+配置好之后，可以先在 Actions → “AI weekly position advisor” → Run workflow 手动跑一次，确认流程正常。
+
+**注意**：仓库是公开的，`ai-journal` 分支上的决定和理由任何人都能看到。日志里没有你的持仓数量。
+
 **费用（粗略估计）**：每次调用包含搜索结果，输入约 2–6 万 token，加上思考和输出几千到一万多 token，再加最多 8 次网络搜索。按 Claude Opus 5.5 的价格（输入 $4 / 百万 token，输出 $20 / 百万 token），每次大约 **$0.3–0.6**。每周一次每月约 $2–3；每天一次约 $10–20；`--samples 3` 再乘以 3。以实际账单为准，每次的 token 用量都记在日志里。
 
 ## 需要清楚的风险

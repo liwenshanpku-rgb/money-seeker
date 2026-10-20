@@ -53,3 +53,9 @@ def test_synthetic_excess_rules():
     assert np.allclose(a["excess"], expected)
     sw = B.synthetic_excess(f, "switch", lookback=7, hurdle=0.05, collateral_haircut=0.0)
     assert sw["use_synthetic"].sum() == 0  # 利差不够 5% 门槛，从不切换
+
+
+def test_rolling_excess_zero_against_itself():
+    v = pd.Series(np.linspace(1, 3, len(IDX)), index=IDX)
+    ex = B.rolling_excess(v, v, 100)
+    assert len(ex) > 0 and np.allclose(ex, 0.0)

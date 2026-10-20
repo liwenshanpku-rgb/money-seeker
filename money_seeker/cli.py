@@ -546,6 +546,30 @@ def _cmd_btc(args: argparse.Namespace) -> None:
     rally_ret = {k: float(s.loc[rally[1]] / s.loc[rally[0]] - 1) for k, s in yearly.items()}
     (out / "btc_rally_2026.json").write_text(json.dumps({"window": rally, "returns": rally_ret}, indent=2))
 
+    # D. 核心仓位比例：0%（全部按均线择时）到 100%（买入持有）
+    start = "2014-06-01"
+    bh = price.loc[start:] / price.loc[start]
+    rows, roll_rows = [], []
+    for core in (0.0, 0.25, 0.5, 0.75, 1.0):
+        v = bh if core == 1.0 else B.trend_overlay(price, 200, core, 0.03, start=start)
+        w = (pd.Series(1.0, index=bh.index) if core == 1.0
+             else B.trend_weight(price, 200, core, 0.03).loc[start:])
+        row = {"core": core, "avg_btc": float(w.mean()), "trades": B.trades(w)}
+        for name, s0 in (("2014~", start), ("2018~", "2018-01-01"), ("2022~", "2022-01-01"), ("2024~", "2024-01-01")):
+            x = v.loc[s0:]
+            st = summarize(x / x.iloc[0])
+            row |= {f"{name}_cagr": st["annual_return"], f"{name}_max_dd": st["max_drawdown"]}
+        row["rally_2026"] = float(v.loc[rally[1]] / v.loc[rally[0]] - 1)
+        rows.append(row)
+        if core < 1.0:
+            for days in (365, 730, 1095):
+                ex = B.rolling_excess(v, bh, days)
+                roll_rows.append({"core": core, "window_years": days // 365, "windows": len(ex),
+                                  "beat_bh_share": float((ex > 0).mean()), "median_excess": float(np.median(ex)),
+                                  "worst_excess": float(ex.min()), "best_excess": float(ex.max())})
+    pd.DataFrame(rows).to_csv(out / "btc_core_spectrum.csv", index=False)
+    pd.DataFrame(roll_rows).to_csv(out / "btc_core_rolling.csv", index=False)
+
     s = "2022-01-01"
     curves = {"buy & hold": price.loc[s:] / price.loc[s],
               "SMA200 core 50% band 3%": B.trend_overlay(price, 200, 0.5, 0.03, start=s),

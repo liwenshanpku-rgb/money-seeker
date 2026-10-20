@@ -158,3 +158,16 @@ def trend_weight(
 
 def trades(weight: pd.Series) -> int:
     return int((weight.diff().abs() > 0).sum())
+
+
+def rolling_excess(value: pd.Series, benchmark: pd.Series, days: int, step: int = 7) -> np.ndarray:
+    """所有长度为 days 的滚动区间里，策略年化收益减去基准年化收益（每 step 天取一个起点）。"""
+    idx = value.index
+    starts = idx[idx <= idx[-1] - pd.Timedelta(days=days)][::step]
+    out = []
+    for s in starts:
+        e = idx[idx.get_indexer([s + pd.Timedelta(days=days)], method="pad")[0]]
+        rv = value.loc[e] / value.loc[s]
+        rb = benchmark.loc[e] / benchmark.loc[s]
+        out.append(rv ** (365 / days) - rb ** (365 / days))
+    return np.array(out)

@@ -18,6 +18,7 @@ money_seeker/
   btc_overlay.py # BTC 持仓增强：合成多头、备兑看涨、部分趋势仓位
   btc_loan.py   # 抵押 BTC 借款：强平概率、借钱加仓、只在上涨趋势里借款
   today.py      # 每日执行助手：当前模式、调仓指令、LTV 提醒
+  ai_advisor.py # AI 仓位顾问：Claude 联网综合判断、护栏、决策日志、模拟盘评估
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -202,6 +203,16 @@ python -m money_seeker today --btc 1.25 --cash 0 --debt 20000 --borrow 0.5 # 方
 
 用 Binance 日线判断当前是上涨还是下跌模式、今天是否需要调仓，并按你的持仓给出具体下单数量和借款风险提醒。不能访问 Binance 时可以用 `--csv` 指定本地日线文件。
 完整的每日操作流程见 [`reports/playbook.md`](reports/playbook.md)。
+
+### 12. AI 仓位顾问（实验）
+
+```bash
+python -m money_seeker ai --dry-run --btc 1.0   # 查看发给模型的内容，不计费
+python -m money_seeker ai --btc 1.0             # 由 Claude 联网查资料后给出 0%–150% 的目标仓位
+python -m money_seeker ai-review                # 按决策日志做模拟盘，与买入持有和方案 B 对比
+```
+
+需要 Claude API 凭据（`ant auth login` 或 `ANTHROPIC_API_KEY`）。AI 的决定无法用历史数据回测，只能从今天起记录、前向验证。用法、护栏、费用和验证方式见 [`reports/ai.md`](reports/ai.md)。
 
 ## 测试
 

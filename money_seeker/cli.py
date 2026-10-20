@@ -665,6 +665,88 @@ def _cmd_today(args: argparse.Namespace) -> None:
         print(f"! 注意：最新数据停在 {close.index[-1].date()}，已经是 {age} 天前，请换数据源或检查网络")
 
 
+def _load_close_for_ai(args: argparse.Namespace) -> pd.Series:
+    if args.csv:
+        return data.load_csv(args.csv)["close"]
+    start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=500)).strftime("%Y-%m-%d")
+    try:
+        return data.fetch_binance_daily("BTCUSDT", start)["close"]
+    except RuntimeError as err:
+        raise SystemExit(f"{err}\n无法访问 Binance：请用 --csv 指定本地日线文件。")
+
+
+def _cmd_ai(args: argparse.Namespace) -> None:
+    from . import ai_advisor as A
+
+    close = _load_close_for_ai(args)
+    funding = tbill = None
+    try:
+        funding = A.fetch_binance_funding()
+    except Exception as err:  # noqa: BLE001 - 资金费率只是参考信息，拿不到就跳过
+        print(f"（资金费率获取失败，跳过：{err}）")
+    try:
+        tbill = A.fetch_tbill()
+    except Exception as err:  # noqa: BLE001
+        print(f"（美债利率获取失败，跳过：{err}）")
+
+    current_pct = args.current_pct
+    if current_pct is None and args.btc is not None:
+        current_pct = A.orders(100, float(close.iloc[-1]), args.btc, args.cash, args.debt)["current_pct"]
+
+    if args.dry_run:
+        history = A.read_journal(args.journal)
+        prev = current_pct if current_pct is not None else (history[-1]["final_pct"] if history else None)
+        print("=== system ===\n" + A.SYSTEM_PROMPT)
+        print("=== user ===\n" + A.build_user_prompt(A.market_snapshot(close, funding, tbill), history, prev))
+        return
+
+    import anthropic
+
+    g = A.Guardrails(enabled=not args.no_guardrails, max_step=args.max_step, min_change=args.min_change,
+                     leverage_needs_uptrend=not args.allow_leverage_anytime)
+    hint = ("请先配置 Claude API 凭据：运行 `ant auth login`，或设置环境变量 ANTHROPIC_API_KEY。"
+            "可以先用 --dry-run 查看提示词。")
+    try:
+        rec = A.decide(anthropic.Anthropic(), close, args.journal, funding, tbill, current_pct,
+                       samples=args.samples, guardrails=g, model=args.model, effort=args.effort)
+    except anthropic.AuthenticationError as err:
+        raise SystemExit(f"Claude API 认证失败：{err}\n{hint}")
+    except anthropic.APIConnectionError as err:
+        raise SystemExit(f"连不上 Claude API：{err}")
+    except TypeError as err:  # SDK 找不到任何凭据时抛出
+        if "authentication" not in str(err).lower():
+            raise
+        raise SystemExit(hint)
+    order = (A.orders(rec["final_pct"], float(close.iloc[-1]), args.btc, args.cash, args.debt)
+             if args.btc is not None else None)
+    print(A.format_decision(rec, order))
+    print(f"已写入日志: {Path(args.journal).resolve()}")
+
+
+def _cmd_ai_review(args: argparse.Namespace) -> None:
+    from . import ai_advisor as A
+
+    journal = A.read_journal(args.journal)
+    close = _load_close_for_ai(args)
+    curves = A.review(journal, close, borrow_rate=args.borrow_rate)
+    rows = {}
+    for name in ("ai", "buy_hold", "core50_sma200"):
+        st = summarize(curves[name])
+        rows[name] = {"total_return": curves[name].iloc[-1] - 1, "max_drawdown": st["max_drawdown"],
+                      "sharpe": st["sharpe"]}
+    table = pd.DataFrame(rows).T
+    print(f"区间: {curves.index[0].date()} ~ {curves.index[-1].date()}（{len(curves)} 天，{len(journal)} 次决定）")
+    print(f"平均 AI 仓位: {curves['ai_position'].mean():.0%}")
+    with pd.option_context("display.precision", 3):
+        print(table.to_string())
+    if len(curves) < 180:
+        print("! 样本不到半年，结果主要是噪音，不要据此下结论。")
+    if args.plot:
+        plot_equity({k: curves[k] for k in ("ai", "buy_hold", "core50_sma200")}, args.plot,
+                    title="AI position advisor - paper trading", price=close.loc[curves.index[0]:])
+        print(f"图: {Path(args.plot).resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -786,6 +868,30 @@ def build_parser() -> argparse.ArgumentParser:
                     help="上涨模式借款 = 核心价值 × 该比例；方案 B 用 0（默认），方案 C 用 0.5")
     td.add_argument("--data-dir", default="data", help="数据缓存目录")
     td.set_defaults(func=_cmd_today)
+
+    ai = sub.add_parser("ai", help="AI 仓位顾问：Claude 综合行情、新闻、宏观，给出 0%–150% 的 BTC 仓位")
+    ai.add_argument("--csv", help="改用本地日线 CSV（默认 Binance）")
+    ai.add_argument("--journal", default="ai_journal/decisions.jsonl", help="决策日志路径")
+    ai.add_argument("--btc", type=float, help="当前 BTC 总数（给出后会算出具体下单数量）")
+    ai.add_argument("--cash", type=float, default=0.0, help="当前现金 / 美债（USD）")
+    ai.add_argument("--debt", type=float, default=0.0, help="当前借款（USD）")
+    ai.add_argument("--current-pct", type=float, help="当前仓位百分比（不给则按 --btc 计算或用上次决定）")
+    ai.add_argument("--samples", type=int, default=1, help="调用几次取中位数，默认 1（每次都会计费）")
+    ai.add_argument("--model", default="claude-opus-5-5", help="Claude 模型")
+    ai.add_argument("--effort", default="high", choices=("low", "medium", "high", "xhigh", "max"))
+    ai.add_argument("--max-step", type=int, default=25, help="护栏：单次最多调整的百分点")
+    ai.add_argument("--min-change", type=int, default=10, help="护栏：小于该变化则不调")
+    ai.add_argument("--allow-leverage-anytime", action="store_true", help="护栏：允许在下跌模式下加杠杆")
+    ai.add_argument("--no-guardrails", action="store_true", help="关闭全部护栏，完全按模型输出")
+    ai.add_argument("--dry-run", action="store_true", help="只打印发给模型的提示词，不调用 API")
+    ai.set_defaults(func=_cmd_ai)
+
+    ar = sub.add_parser("ai-review", help="按 AI 决策日志做模拟盘，与买入持有和 200 日均线方案对比")
+    ar.add_argument("--csv", help="改用本地日线 CSV（默认 Binance）")
+    ar.add_argument("--journal", default="ai_journal/decisions.jsonl", help="决策日志路径")
+    ar.add_argument("--borrow-rate", type=float, default=0.08, help="仓位超过 100% 时的借款年利率")
+    ar.add_argument("--plot", help="保存净值对比图的路径")
+    ar.set_defaults(func=_cmd_ai_review)
     return p
 
 

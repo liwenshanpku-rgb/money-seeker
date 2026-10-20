@@ -296,6 +296,74 @@ def _cmd_funding(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_onchain(args: argparse.Namespace) -> None:
+    from .onchain import FAMILIES, applicable, evaluate, load_metrics, mvrv_z, positions, trade_log
+    from .rotation import ROTATION_EXTRA_ASSETS
+    from .universe import EXTRA_ASSETS
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    periods = {"btc": {"IS": (args.is_start, args.is_end), "OOS": (args.oos_start, None)},
+               "eth": {"IS": ("2016-08-01", args.is_end), "OOS": (args.oos_start, None)}}
+    m = {a: load_metrics(a, args.data_dir, args.refresh) for a in ("btc", "eth")}
+
+    # 1. 全部信号 × 参数：BTC 样本内 / 样本外，ETH 交叉验证
+    rows = []
+    for fam, (_, grid, _) in FAMILIES.items():
+        for prm in grid:
+            row = {"family": fam, "params": json.dumps(prm)}
+            for a, pers in periods.items():
+                if fam == "puell" and a != "btc":
+                    continue  # ETH 发行机制多次变化，Puell 倍数没有意义
+                pos = positions(m[a], fam, prm)
+                for name, (s, e) in pers.items():
+                    if applicable(m[a], fam, s, e):
+                        row |= {f"{a}_{name}_{k}": v for k, v in evaluate(m[a]["PriceUSD"], pos, s, e).items()}
+            rows.append(row)
+    scan = pd.DataFrame(rows)
+    scan.to_csv(out / "onchain_scan.csv", index=False)
+    selected = scan.loc[scan.groupby("family")["btc_IS_sharpe"].idxmax()]
+    selected.to_csv(out / "onchain_selected.csv", index=False)
+
+    # 2. 选中的 MVRV 类规则搬到其他币（2022 年至今）
+    others = ("eth", *EXTRA_ASSETS, *ROTATION_EXTRA_ASSETS)
+    rows = []
+    for a in others:
+        mm = load_metrics(a, args.data_dir, args.refresh)
+        if "CapMVRVCur" not in mm or mm["CapMVRVCur"].notna().sum() < 1460 + 365:
+            continue
+        for fam in ("mvrv", "mvrv_z", "mvrv_z_adaptive"):
+            prm = json.loads(selected.set_index("family").loc[fam, "params"])
+            r = evaluate(mm["PriceUSD"], positions(mm, fam, prm), args.oos_start, None)
+            rows.append({"asset": a, "family": fam, "params": json.dumps(prm), **r})
+    cross = pd.DataFrame(rows)
+    cross.to_csv(out / "onchain_mvrv_cross_coin.csv", index=False)
+
+    # 3. MVRV Z 的完整交易记录，以及选中规则在 BTC 样本外的权益曲线
+    best_z = json.loads(selected.set_index("family").loc["mvrv_z", "params"])
+    trade_log(m["btc"], "mvrv_z", best_z, mvrv_z(m["btc"])).to_csv(out / "onchain_trades_btc_mvrv_z.csv", index=False)
+    from .signals import run_positions
+
+    px = m["btc"]["PriceUSD"].loc[args.oos_start:]
+    curves = {"BTC buy & hold": px / px.iloc[0]}
+    for _, r in selected.iterrows():
+        pos = positions(m["btc"], r["family"], json.loads(r["params"])).reindex(px.index).ffill().fillna(0.0)
+        curves[r["family"]] = run_positions(px, pos, capital=1.0, lag=1)
+    plot_equity(curves, out / "onchain_btc_oos.png",
+                title=f"BTC on-chain signals, out-of-sample from {args.oos_start} (params picked in-sample)")
+
+    with pd.option_context("display.width", 250, "display.max_columns", 30, "display.precision", 2):
+        cols = ["family", "params", "btc_IS_sharpe", "btc_IS_trades", "btc_OOS_total_ret",
+                "btc_OOS_sharpe", "btc_OOS_max_dd", "btc_OOS_trades", "eth_OOS_total_ret", "eth_OOS_sharpe"]
+        print(selected[[c for c in cols if c in selected]].to_string(index=False))
+        g = cross.groupby("family")
+        print(pd.DataFrame({"coins": g.size(),
+                            "profitable": g.apply(lambda x: (x.total_ret > 0).sum()),
+                            "beat_bh_sharpe": g.apply(lambda x: (x.sharpe > x.bh_sharpe).sum()),
+                            "never_traded": g.apply(lambda x: (x.trades == 0).sum())}).to_string())
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -374,6 +442,15 @@ def build_parser() -> argparse.ArgumentParser:
     fu.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
     fu.add_argument("--out-dir", default="output/funding", help="结果输出目录")
     fu.set_defaults(func=_cmd_funding)
+
+    oc = sub.add_parser("onchain", help="链上数据择时：MVRV、Puell、算力、交易所余额、活跃地址")
+    oc.add_argument("--is-start", default="2012-01-01", help="样本内开始（BTC）")
+    oc.add_argument("--is-end", default="2021-12-31", help="样本内结束")
+    oc.add_argument("--oos-start", default="2022-01-01", help="样本外开始")
+    oc.add_argument("--data-dir", default="data", help="数据缓存目录")
+    oc.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
+    oc.add_argument("--out-dir", default="output/onchain", help="结果输出目录")
+    oc.set_defaults(func=_cmd_onchain)
     return p
 
 

@@ -13,6 +13,7 @@ money_seeker/
   universe.py   # 多币种验证周线动量：逐币、安慰剂检验、等权组合
   rotation.py   # 横截面动量轮动：组合回测引擎、参数扫描、随机选币安慰剂
   funding.py    # 资金费率：期现套利、资金费率择时
+  onchain.py    # 链上数据：MVRV、Puell、算力、交易所余额、活跃地址
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -142,6 +143,17 @@ python -m money_seeker funding --out-dir reports
 结论见 [`reports/funding.md`](reports/funding.md)：
 - **常开期现套利每年都赚钱**，但熊市里收益接近美债，主要风险是交易所倒闭和强平；
 - 条件开关和资金费率择时都没有带来改进。
+
+### 7. 链上数据策略
+
+```bash
+python -m money_seeker onchain --out-dir reports
+```
+
+测试了 MVRV、MVRV Z 分数、Puell 倍数、算力带、交易所余额、活跃地址等链上信号。在 BTC 2012–2021 上选参数，2022 年后检验，再搬到 ETH 和另外 32 个币上验证。
+结论见 [`reports/onchain.md`](reports/onchain.md)：**没有可靠的盈利策略**。
+- 链上活动类信号样本外失败；
+- MVRV 类估值信号事后很漂亮，但样本外只有 1 笔交易，而且周期顶部在逐轮降低，固定卖出阈值已经失效。
 
 ## 测试
 

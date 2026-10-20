@@ -16,6 +16,7 @@ money_seeker/
   onchain.py    # 链上数据：MVRV、Puell、算力、交易所余额、活跃地址
   carry.py      # 期现套利细化：新数据、账户模式、杠杆与强平、基差、轮动
   btc_overlay.py # BTC 持仓增强：合成多头、备兑看涨、部分趋势仓位
+  btc_loan.py   # 抵押 BTC 借款：强平概率、借钱加仓、只在上涨趋势里借款
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -178,6 +179,18 @@ python -m money_seeker btc --out-dir reports
 - **“50% 核心 + 50% 跟随 200 日均线”** 在 2014–2026 年年化 57.6%（买入持有 48.7%），回撤更小；但在 V 型反弹和持续牛市里会少赚；
 - 合成多头基本没有超额；
 - 备兑看涨长期跑输。
+
+### 10. 抵押 BTC 借款
+
+```bash
+python -m money_seeker loan --out-dir reports
+```
+
+测算抵押 BTC 借款的强平概率，以及借钱加仓的几种做法。
+结论见 [`reports/loan.md`](reports/loan.md)：
+- 借钱买美债或做套利，借款利率基本都高于收益；
+- 借钱加仓后一直持有，借款比例 30% 以上时历史上每轮熊市都会被强平；
+- **只在上涨趋势里借款（借核心价值的 50% 以内）、趋势转弱就还清**，长期年化约多 5 个百分点，回撤基本不变。
 
 ## 测试
 

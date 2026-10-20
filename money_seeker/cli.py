@@ -585,6 +585,64 @@ def _cmd_btc(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_loan(args: argparse.Namespace) -> None:
+    from . import btc_loan as L
+    from .btc_overlay import btc_price, trend_overlay
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    price = btc_price(args.data_dir)
+    start = "2014-06-01"
+
+    # 1. 借款后不管：强平概率
+    rows = []
+    for ltv in (0.1, 0.2, 0.3, 0.4, 0.5):
+        for h in (365, 730, 1095):
+            for r in (0.05, 0.105):
+                rows.append({**L.liquidation_frequency(price, ltv, h, r, start=start, step=3),
+                             "borrow_rate": r, "drop_to_liquidation": L.liquidation_drop(ltv)})
+    pd.DataFrame(rows).to_csv(out / "loan_liquidation_risk.csv", index=False)
+
+    # 2. 借钱买 BTC 后一直持有 vs 只在上涨趋势里借款（核心 50% + 200 日均线）
+    rows, curves = [], {}
+    for s0 in (start, "2018-01-01", "2022-01-01", "2024-01-01"):
+        def add(name, eq, liq=()):
+            st = summarize(eq / eq.iloc[0])
+            rows.append({"start": s0, "strategy": name, "cagr": st["annual_return"],
+                         "max_dd": st["max_drawdown"], "liquidations": len(liq),
+                         "first_liquidation": str(liq[0].date()) if liq else ""})
+        add("buy & hold", price.loc[s0:])
+        add("core 50% + SMA200, no loan", trend_overlay(price, 200, 0.5, 0.03, start=s0))
+        for bf in (0.2, 0.3, 0.5):
+            eq, liq = L.leveraged_hold(price, bf, 0.05, start=s0)
+            add(f"borrow {bf:.0%} of BTC value & hold @5%", eq, liq)
+        for bf in (0.5, 1.0):
+            for r in (0.05, 0.105):
+                eq, liq = L.levered_trend(price, 0.5, bf, r, start=s0)
+                add(f"uptrend-only borrow {bf:.0%} of core @{r:.1%}", eq, liq)
+                if s0 == "2022-01-01" and r == 0.105:
+                    curves[f"uptrend-only borrow {bf:.0%} of core @10.5%"] = eq
+    pd.DataFrame(rows).to_csv(out / "loan_strategies.csv", index=False)
+
+    rows = []
+    for bf in (0.5, 1.0, 1.5):
+        worst, when = L.worst_ltv_levered_trend(price, 0.5, bf, start=start)
+        rows.append({"borrow_frac_of_core": bf, "start_ltv": bf * 0.5 / (1 + bf * 0.5), "worst_ltv": worst,
+                     "worst_date": str(when.date()) if when is not None else "",
+                     "further_drop_to_liquidation": 1 - worst / 0.8})
+    pd.DataFrame(rows).to_csv(out / "loan_uptrend_margin.csv", index=False)
+
+    s0 = "2022-01-01"
+    curves["core 50% + SMA200, no loan"] = trend_overlay(price, 200, 0.5, 0.03, start=s0)
+    curves["buy & hold"] = price.loc[s0:] / price.loc[s0]
+    plot_equity(curves, out / "loan_overlay.png",
+                title="Borrowing against the BTC core only in uptrends (since 2022)")
+    with pd.option_context("display.width", 250, "display.max_columns", 30, "display.precision", 3):
+        print(pd.read_csv(out / "loan_strategies.csv").to_string(index=False))
+        print(pd.read_csv(out / "loan_uptrend_margin.csv").to_string(index=False))
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -684,6 +742,11 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--data-dir", default="data", help="数据缓存目录")
     bt.add_argument("--out-dir", default="output/btc", help="结果输出目录")
     bt.set_defaults(func=_cmd_btc)
+
+    lo = sub.add_parser("loan", help="抵押 BTC 借款：强平概率、借钱加仓、只在上涨趋势里借款")
+    lo.add_argument("--data-dir", default="data", help="数据缓存目录")
+    lo.add_argument("--out-dir", default="output/loan", help="结果输出目录")
+    lo.set_defaults(func=_cmd_loan)
     return p
 
 

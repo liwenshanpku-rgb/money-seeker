@@ -60,6 +60,9 @@ def test_ask_claude_parses_decision_and_sources():
     assert ans.sources == [{"title": "ETF flows", "url": "https://example.com/etf"}]
     call = client.calls[0]
     assert [t["type"] for t in call["tools"]] == ["web_search_20260209", "web_fetch_20260209"]
+    assert call["tools"][1]["max_content_tokens"] == 6000
+    assert all("sec.gov" in t["blocked_domains"] for t in call["tools"])
+    assert call["cache_control"] == {"type": "ephemeral"}
     assert call["output_config"]["format"]["type"] == "json_schema"
     assert call["fallbacks"] == "default"
 
@@ -151,3 +154,14 @@ def test_review_matches_buy_hold_at_100pct():
     journal = [{"as_of_close_utc": str(IDX[250].date()), "final_pct": 100, "previous_pct": 100}]
     curves = A.review(journal, CLOSE, fee=0.0)
     np.testing.assert_allclose(curves["ai"].to_numpy(), curves["buy_hold"].to_numpy())
+
+
+def test_usage_summary_cost_estimate():
+    usage = NS(input_tokens=10_000, output_tokens=5_000, cache_read_input_tokens=200_000,
+               cache_creation_input_tokens=40_000,
+               server_tool_use=NS(web_search_requests=10, web_fetch_requests=4))
+    u = A.usage_summary(usage)
+    # 0.04 + 0.10 + 0.04 + 0.20 + 搜索 0.10
+    assert u["estimated_cost_usd"] == pytest.approx(0.48)
+    assert u["web_fetch_requests"] == 4
+    assert A.usage_summary(None) == {}

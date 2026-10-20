@@ -481,6 +481,86 @@ def _cmd_carry(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_btc(args: argparse.Namespace) -> None:
+    from . import btc_overlay as B
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    price = B.btc_price(args.data_dir)
+    periods = {"2014-06~": ("2014-06-01", None), "2022~ (OOS)": ("2022-01-01", None),
+               "2024~": ("2024-01-01", None)}
+
+    def stats(v: pd.Series) -> dict:
+        st = summarize(v)
+        return {"cagr": st["annual_return"], "sharpe": st["sharpe"], "max_dd": st["max_drawdown"]}
+
+    # A. 现货 vs 合成多头：相对现货的年化超额
+    f = B.btc_funding_daily(args.data_dir)
+    segs = {"2020": ("2020", "2020"), "2021": ("2021", "2021"), "2022": ("2022", "2022"),
+            "2023": ("2023", "2023"), "2025H2": ("2025-08-21", "2025-12-31"), "2026": ("2026", "2026")}
+    rows = []
+    variants = [("always", 30, 0.0)] + [("switch", lb, h) for lb in (7, 30) for h in (0.0, 0.01, 0.02)]
+    for rule, lb, h in variants:
+        x = B.synthetic_excess(f, rule, lb, h)
+        row = {"rule": rule, "lookback": lb if rule == "switch" else None, "hurdle": h if rule == "switch" else None}
+        for k, (s, e) in segs.items():
+            row[k] = float(x["excess"].loc[s:e].dropna().mean() * 365)
+        rows.append(row)
+    pd.DataFrame(rows).to_csv(out / "btc_synthetic_vs_spot.csv", index=False)
+
+    # B. 备兑看涨（模型估算）
+    rows, yearly = [], {}
+    for otm in (0.05, 0.10, 0.20, 0.30):
+        for ivr in (1.0, 1.15, 1.3):
+            for name, (s, e) in periods.items():
+                cc = B.covered_call(price, otm=otm, iv_ratio=ivr, start=s, end=e)
+                bh = price.loc[s:e]
+                rows.append({"otm": otm, "iv_ratio": ivr, "period": name, **stats(cc["value"]),
+                             "bh_cagr": summarize(bh)["annual_return"], "btc_units_end": cc["btc"].iloc[-1]})
+                if name == "2014-06~" and ivr == 1.15 and otm in (0.10, 0.20):
+                    yearly[f"covered call {otm:.0%} OTM"] = cc["value"]
+    pd.DataFrame(rows).to_csv(out / "btc_covered_call.csv", index=False)
+
+    # C. 部分趋势仓位
+    rows = []
+    for name, (s, e) in periods.items():
+        rows.append({"period": name, "strategy": "buy & hold", **stats(price.loc[s:e]), "avg_btc": 1.0, "trades": 0})
+        for n in (200, 140):
+            for core in (0.0, 0.5, 0.7):
+                for band, weekly in ((0.0, False), (0.03, False), (0.03, True)):
+                    v = B.trend_overlay(price, n, core, band, weekly, start=s, end=e)
+                    w = B.trend_weight(price, n, core, band, weekly).loc[s:e]
+                    label = f"SMA{n} core {core:.0%}" + (f" band {band:.0%}" if band else "") + (" weekly" if weekly else "")
+                    rows.append({"period": name, "strategy": label, **stats(v),
+                                 "avg_btc": float(w.mean()), "trades": B.trades(w)})
+    trend = pd.DataFrame(rows)
+    trend.to_csv(out / "btc_trend_overlay.csv", index=False)
+
+    v = B.trend_overlay(price, 200, 0.5, 0.03, start="2014-06-01")
+    yearly["SMA200 core 50% band 3%"] = v
+    yearly["buy & hold"] = price.loc["2014-06-01":]
+    yr = pd.DataFrame({k: s.resample("YE").last() for k, s in yearly.items()}).pct_change().iloc[1:]
+    yr.index = yr.index.year
+    yr.to_csv(out / "btc_yearly.csv")
+    rally = ("2026-06-30", str(price.index[-1].date()))
+    rally_ret = {k: float(s.loc[rally[1]] / s.loc[rally[0]] - 1) for k, s in yearly.items()}
+    (out / "btc_rally_2026.json").write_text(json.dumps({"window": rally, "returns": rally_ret}, indent=2))
+
+    s = "2022-01-01"
+    curves = {"buy & hold": price.loc[s:] / price.loc[s],
+              "SMA200 core 50% band 3%": B.trend_overlay(price, 200, 0.5, 0.03, start=s),
+              "covered call 10% OTM (model)": B.covered_call(price, otm=0.10, start=s)["value"]}
+    plot_equity(curves, out / "btc_overlays.png", title="BTC holder overlays since 2022 (out-of-sample period)",
+                price=price.loc[s:])
+
+    with pd.option_context("display.width", 250, "display.max_columns", 30, "display.precision", 3):
+        print(trend[trend["strategy"].isin(["buy & hold", "SMA200 core 50%", "SMA200 core 50% band 3%",
+                                            "SMA140 core 50% band 3%", "SMA200 core 0%"])].to_string(index=False))
+        print((yr * 100).round(1).T.to_string())
+        print(json.dumps(rally_ret, indent=2))
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -575,6 +655,11 @@ def build_parser() -> argparse.ArgumentParser:
     ca.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
     ca.add_argument("--out-dir", default="output/carry", help="结果输出目录")
     ca.set_defaults(func=_cmd_carry)
+
+    bt = sub.add_parser("btc", help="BTC 持仓增强：现货 vs 合成多头、备兑看涨、部分趋势仓位")
+    bt.add_argument("--data-dir", default="data", help="数据缓存目录")
+    bt.add_argument("--out-dir", default="output/btc", help="结果输出目录")
+    bt.set_defaults(func=_cmd_btc)
     return p
 
 

@@ -15,6 +15,7 @@ money_seeker/
   funding.py    # 资金费率：期现套利、资金费率择时
   onchain.py    # 链上数据：MVRV、Puell、算力、交易所余额、活跃地址
   carry.py      # 期现套利细化：新数据、账户模式、杠杆与强平、基差、轮动
+  btc_overlay.py # BTC 持仓增强：合成多头、备兑看涨、部分趋势仓位
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -165,6 +166,18 @@ python -m money_seeker carry --out-dir reports
 补上 2025-08 ~ 2026-10 的 Binance / Bybit / Hyperliquid 资金费率（GitHub 公开数据），并细化以下几项：手续费与滑点、统一账户和分账户的资金利用率、空单强平风险、基差、各币横截面与轮动，与美债对比。
 结论见 [`reports/carry.md`](reports/carry.md)：**2026 年 BTC/ETH 期现套利扣成本后年化约 1–2%，低于美债的 3.6–3.9%**；换山寨币或轮动更差。
 2024-01 ~ 2025-08 没有可用的公开数据。
+
+### 9. 持有 BTC 时的增强操作
+
+```bash
+python -m money_seeker btc --out-dir reports
+```
+
+在保留 BTC 上涨敞口的前提下，比较三种做法：现货 vs 合成多头（美债 + 永续多单）、备兑看涨（模型估算）、部分趋势仓位（核心仓位 + 200 日均线）。
+结论见 [`reports/btc.md`](reports/btc.md)：
+- **“50% 核心 + 50% 跟随 200 日均线”** 在 2014–2026 年年化 57.6%（买入持有 48.7%），回撤更小；但在 V 型反弹和持续牛市里会少赚；
+- 合成多头基本没有超额；
+- 备兑看涨长期跑输。
 
 ## 测试
 

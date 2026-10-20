@@ -1,0 +1,34 @@
+{
+  "family": "contrarian",
+  "params": {
+    "n": 7,
+    "low": 0.0001,
+    "exit_high": 0.0002
+  },
+  "placebo_pctile": {
+    "BTC_IS": 0.9863013698630136,
+    "BTC_OOS": 0.7678571428571429,
+    "ETH_IS": 0.5616438356164384,
+    "ETH_OOS": 0.29017857142857145
+  },
+  "BTC_IS_ret": 6.262883005574636,
+  "BTC_IS_sharpe": 2.4000560558160595,
+  "BTC_IS_bh_ret": 4.2607830477915725,
+  "BTC_IS_bh_sharpe": 1.5043505677658418,
+  "BTC_IS_exposure": 0.49372384937238495,
+  "BTC_OOS_ret": -0.0845240257580484,
+  "BTC_OOS_sharpe": 0.19496932903122838,
+  "BTC_OOS_bh_ret": -0.1123391407983978,
+  "BTC_OOS_bh_sharpe": 0.166974319930327,
+  "BTC_OOS_exposure": 0.9917808219178083,
+  "ETH_IS_ret": 3.052856942752328,
+  "ETH_IS_sharpe": 1.5404327241300606,
+  "ETH_IS_bh_ret": 21.230134314140944,
+  "ETH_IS_bh_sharpe": 2.0895247068154994,
+  "ETH_IS_exposure": 0.41841004184100417,
+  "ETH_OOS_ret": -0.464517316973293,
+  "ETH_OOS_sharpe": -0.10955231156385427,
+  "ETH_OOS_bh_ret": -0.39403361245540736,
+  "ETH_OOS_bh_sharpe": -0.008156837206133262,
+  "ETH_OOS_exposure": 0.9342465753424658
+}

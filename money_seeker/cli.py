@@ -679,11 +679,17 @@ def _cmd_ai(args: argparse.Namespace) -> None:
     from . import ai_advisor as A
 
     close = _load_close_for_ai(args)
-    funding = tbill = None
-    try:
-        funding = A.fetch_binance_funding()
-    except Exception as err:  # noqa: BLE001 - 资金费率只是参考信息，拿不到就跳过
-        print(f"（资金费率获取失败，跳过：{err}）")
+    funding = tbill = oi = None
+    source = "hyperliquid"
+    try:  # Hyperliquid 对美国服务器（如 GitHub Actions）开放；拿不到再试 Binance
+        funding = A.fetch_hyperliquid_funding()
+        oi = A.fetch_hyperliquid_open_interest()
+    except Exception as err:  # noqa: BLE001 - 衍生品数据只是参考信息，拿不到就跳过
+        print(f"（Hyperliquid 数据获取失败：{err}）")
+        try:
+            funding, source = A.fetch_binance_funding(), "binance"
+        except Exception as err2:  # noqa: BLE001
+            print(f"（资金费率获取失败，跳过：{err2}）")
     try:
         tbill = A.fetch_tbill()
     except Exception as err:  # noqa: BLE001
@@ -697,7 +703,8 @@ def _cmd_ai(args: argparse.Namespace) -> None:
         history = A.read_journal(args.journal)
         prev = current_pct if current_pct is not None else (history[-1]["final_pct"] if history else None)
         print("=== system ===\n" + A.SYSTEM_PROMPT)
-        print("=== user ===\n" + A.build_user_prompt(A.market_snapshot(close, funding, tbill), history, prev))
+        snap = A.market_snapshot(close, funding, tbill, funding_source=source, open_interest=oi)
+        print("=== user ===\n" + A.build_user_prompt(snap, history, prev))
         return
 
     import anthropic
@@ -708,7 +715,8 @@ def _cmd_ai(args: argparse.Namespace) -> None:
             "可以先用 --dry-run 查看提示词。")
     try:
         rec = A.decide(anthropic.Anthropic(), close, args.journal, funding, tbill, current_pct,
-                       samples=args.samples, guardrails=g, model=args.model, effort=args.effort)
+                       samples=args.samples, guardrails=g, model=args.model, effort=args.effort,
+                       funding_source=source, open_interest=oi)
     except anthropic.AuthenticationError as err:
         raise SystemExit(f"Claude API 认证失败：{err}\n{hint}")
     except anthropic.APIConnectionError as err:

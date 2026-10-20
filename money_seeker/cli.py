@@ -658,6 +658,10 @@ def _cmd_today(args: argparse.Namespace) -> None:
             raise SystemExit(f"{err}\n无法访问 Binance：可以改用 --csv 指定本地日线文件，"
                              "或按操作手册在 TradingView 上手动查看 200 日均线。")
     age = (pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - close.index[-1]).days
+    if args.from_kraken:
+        h = _kraken_holdings()
+        args.btc, args.cash = h.btc, h.cash_usd
+        print(f"（已从 Kraken 读取：BTC {h.btc:.8f}，美元及稳定币 {h.cash_usd:,.2f}）")
     plan = Plan(core=args.core, sma_days=args.sma, band=args.band, borrow_frac=args.borrow)
     rep = daily_report(close, plan, args.btc, args.cash, args.debt)
     print(format_report(rep))
@@ -695,6 +699,10 @@ def _cmd_ai(args: argparse.Namespace) -> None:
     except Exception as err:  # noqa: BLE001
         print(f"（美债利率获取失败，跳过：{err}）")
 
+    if args.from_kraken:
+        h = _kraken_holdings()
+        args.btc, args.cash = h.btc, h.cash_usd
+        print(f"（已从 Kraken 读取：BTC {h.btc:.8f}，美元及稳定币 {h.cash_usd:,.2f}）")
     current_pct = args.current_pct
     if current_pct is None and args.btc is not None:
         current_pct = A.orders(100, float(close.iloc[-1]), args.btc, args.cash, args.debt)["current_pct"]
@@ -753,6 +761,24 @@ def _cmd_ai_review(args: argparse.Namespace) -> None:
         plot_equity({k: curves[k] for k in ("ai", "buy_hold", "core50_sma200")}, args.plot,
                     title="AI position advisor - paper trading", price=close.loc[curves.index[0]:])
         print(f"图: {Path(args.plot).resolve()}")
+
+
+def _kraken_holdings():
+    from . import kraken
+
+    try:
+        return kraken.holdings()
+    except (kraken.KrakenError, OSError) as err:
+        raise SystemExit(f"读取 Kraken 账户失败：{err}")
+
+
+def _cmd_kraken(args: argparse.Namespace) -> None:
+    from . import kraken
+
+    h = _kraken_holdings()
+    print(kraken.format_holdings(h, args.debt))
+    if h.other:
+        print("（其他资产不计入 BTC 仓位和现金；如有需要请换成 USD 或稳定币）")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -875,6 +901,8 @@ def build_parser() -> argparse.ArgumentParser:
     td.add_argument("--borrow", type=float, default=0.0,
                     help="上涨模式借款 = 核心价值 × 该比例；方案 B 用 0（默认），方案 C 用 0.5")
     td.add_argument("--data-dir", default="data", help="数据缓存目录")
+    td.add_argument("--from-kraken", action="store_true",
+                    help="从 Kraken 读取 BTC 和美元/稳定币余额（需要环境变量 KRAKEN_API_KEY / KRAKEN_API_SECRET）")
     td.set_defaults(func=_cmd_today)
 
     ai = sub.add_parser("ai", help="AI 仓位顾问：Claude 综合行情、新闻、宏观，给出 0%–150% 的 BTC 仓位")
@@ -892,6 +920,8 @@ def build_parser() -> argparse.ArgumentParser:
     ai.add_argument("--allow-leverage-anytime", action="store_true", help="护栏：允许在下跌模式下加杠杆")
     ai.add_argument("--no-guardrails", action="store_true", help="关闭全部护栏，完全按模型输出")
     ai.add_argument("--dry-run", action="store_true", help="只打印发给模型的提示词，不调用 API")
+    ai.add_argument("--from-kraken", action="store_true",
+                    help="从 Kraken 读取当前持仓（只在本地使用，不要在公开的 GitHub Actions 里用）")
     ai.set_defaults(func=_cmd_ai)
 
     ar = sub.add_parser("ai-review", help="按 AI 决策日志做模拟盘，与买入持有和 200 日均线方案对比")
@@ -900,6 +930,10 @@ def build_parser() -> argparse.ArgumentParser:
     ar.add_argument("--borrow-rate", type=float, default=0.08, help="仓位超过 100% 时的借款年利率")
     ar.add_argument("--plot", help="保存净值对比图的路径")
     ar.set_defaults(func=_cmd_ai_review)
+
+    kr = sub.add_parser("kraken", help="Kraken 只读同步：显示 BTC、美元及稳定币余额和当前 BTC 仓位")
+    kr.add_argument("--debt", type=float, default=0.0, help="Kraken 之外的借款（USD），用于计算仓位")
+    kr.set_defaults(func=_cmd_kraken)
     return p
 
 

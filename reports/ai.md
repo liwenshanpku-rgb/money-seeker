@@ -81,6 +81,8 @@ python -m money_seeker ai --btc 1.0 --samples 3
 python -m money_seeker ai-review --plot ai_review.png
 ```
 
+在本地也可以用 `--from-kraken` 自动读取 Kraken 持仓并算出下单数量（设置方法见 [playbook.md](playbook.md)），例如 `python -m money_seeker ai --from-kraken`。**不要在公开的 GitHub 任务里使用这个选项。**
+
 输出示例结构（具体内容由模型生成）：
 
 ```

@@ -19,6 +19,7 @@ money_seeker/
   btc_loan.py   # 抵押 BTC 借款：强平概率、借钱加仓、只在上涨趋势里借款
   today.py      # 每日执行助手：当前模式、调仓指令、LTV 提醒
   ai_advisor.py # AI 仓位顾问：Claude 联网综合判断、护栏、决策日志、模拟盘评估
+  kraken.py     # Kraken 只读同步：余额、当前 BTC 仓位
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -203,6 +204,16 @@ python -m money_seeker today --btc 1.25 --cash 0 --debt 20000 --borrow 0.5 # 方
 
 用 Binance 日线判断当前是上涨还是下跌模式、今天是否需要调仓，并按你的持仓给出具体下单数量和借款风险提醒。不能访问 Binance 时可以用 `--csv` 指定本地日线文件。
 完整的每日操作流程见 [`reports/playbook.md`](reports/playbook.md)。
+
+### Kraken 只读同步
+
+```bash
+export KRAKEN_API_KEY=...  KRAKEN_API_SECRET=...   # 只读密钥，只开 Funds → Query 权限
+python -m money_seeker kraken                       # 余额与当前 BTC 仓位
+python -m money_seeker today --from-kraken          # 每日检查自动带入持仓
+```
+
+只在本地使用，不要放进公开的 GitHub 任务。设置步骤见 [`reports/playbook.md`](reports/playbook.md)。
 
 ### 12. AI 仓位顾问（实验）
 

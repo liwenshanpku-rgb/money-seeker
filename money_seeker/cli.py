@@ -605,7 +605,7 @@ def _cmd_loan(args: argparse.Namespace) -> None:
 
     # 2. 借钱买 BTC 后一直持有 vs 只在上涨趋势里借款（核心 50% + 200 日均线）
     rows, curves = [], {}
-    for s0 in (start, "2018-01-01", "2022-01-01", "2024-01-01"):
+    for s0 in (start, "2018-01-01", "2022-01-01", "2024-01-01", "2026-01-01"):
         def add(name, eq, liq=()):
             st = summarize(eq / eq.iloc[0])
             rows.append({"start": s0, "strategy": name, "cagr": st["annual_return"],
@@ -641,6 +641,28 @@ def _cmd_loan(args: argparse.Namespace) -> None:
         print(pd.read_csv(out / "loan_strategies.csv").to_string(index=False))
         print(pd.read_csv(out / "loan_uptrend_margin.csv").to_string(index=False))
     print(f"输出目录: {out.resolve()}")
+
+
+def _cmd_today(args: argparse.Namespace) -> None:
+    from .today import Plan, daily_report, format_report
+
+    if args.csv:
+        close = data.load_csv(args.csv)["close"]
+    elif args.source == "coinmetrics":
+        close = data.load_or_fetch_coinmetrics("btc", args.data_dir, refresh=True)["close"]
+    else:  # 默认：Binance 现货日线，只保留已收盘的 K 线
+        start = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=args.history_days)).strftime("%Y-%m-%d")
+        try:
+            close = data.fetch_binance_daily(args.symbol, start)["close"]
+        except RuntimeError as err:
+            raise SystemExit(f"{err}\n无法访问 Binance：可以改用 --csv 指定本地日线文件，"
+                             "或按操作手册在 TradingView 上手动查看 200 日均线。")
+    age = (pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - close.index[-1]).days
+    plan = Plan(core=args.core, sma_days=args.sma, band=args.band, borrow_frac=args.borrow)
+    rep = daily_report(close, plan, args.btc, args.cash, args.debt)
+    print(format_report(rep))
+    if age > 2:
+        print(f"! 注意：最新数据停在 {close.index[-1].date()}，已经是 {age} 天前，请换数据源或检查网络")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -747,6 +769,23 @@ def build_parser() -> argparse.ArgumentParser:
     lo.add_argument("--data-dir", default="data", help="数据缓存目录")
     lo.add_argument("--out-dir", default="output/loan", help="结果输出目录")
     lo.set_defaults(func=_cmd_loan)
+
+    td = sub.add_parser("today", help="每日执行助手：今天的模式、是否需要调仓、具体下单数量")
+    td.add_argument("--source", choices=("binance", "coinmetrics"), default="binance",
+                    help="价格来源，默认 Binance 现货日线（需要能访问 Binance）")
+    td.add_argument("--csv", help="改用本地 CSV（列 date,close 等）")
+    td.add_argument("--symbol", default="BTCUSDT", help="Binance 交易对")
+    td.add_argument("--history-days", type=int, default=500, help="拉取多少天历史，需大于均线天数")
+    td.add_argument("--btc", type=float, help="当前持有的 BTC 总数（含核心与抵押部分）")
+    td.add_argument("--cash", type=float, default=0.0, help="当前现金 / 美债 / 货币基金（USD）")
+    td.add_argument("--debt", type=float, default=0.0, help="当前借款余额（USD，含应计利息）")
+    td.add_argument("--core", type=float, default=0.5, help="永远持有的比例，默认 0.5")
+    td.add_argument("--sma", type=int, default=200, help="均线天数，默认 200")
+    td.add_argument("--band", type=float, default=0.03, help="缓冲区，默认 0.03")
+    td.add_argument("--borrow", type=float, default=0.0,
+                    help="上涨模式借款 = 核心价值 × 该比例；方案 B 用 0（默认），方案 C 用 0.5")
+    td.add_argument("--data-dir", default="data", help="数据缓存目录")
+    td.set_defaults(func=_cmd_today)
     return p
 
 

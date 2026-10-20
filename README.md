@@ -17,6 +17,7 @@ money_seeker/
   carry.py      # 期现套利细化：新数据、账户模式、杠杆与强平、基差、轮动
   btc_overlay.py # BTC 持仓增强：合成多头、备兑看涨、部分趋势仓位
   btc_loan.py   # 抵押 BTC 借款：强平概率、借钱加仓、只在上涨趋势里借款
+  today.py      # 每日执行助手：当前模式、调仓指令、LTV 提醒
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -191,6 +192,16 @@ python -m money_seeker loan --out-dir reports
 - 借钱买美债或做套利，借款利率基本都高于收益；
 - 借钱加仓后一直持有，借款比例 30% 以上时历史上每轮熊市都会被强平；
 - **只在上涨趋势里借款（借核心价值的 50% 以内）、趋势转弱就还清**，长期年化约多 5 个百分点，回撤基本不变。
+
+### 11. 每日执行助手与操作手册
+
+```bash
+python -m money_seeker today --btc 1.0 --cash 0                          # 方案 B
+python -m money_seeker today --btc 1.25 --cash 0 --debt 20000 --borrow 0.5 # 方案 C
+```
+
+用 Binance 日线判断当前是上涨还是下跌模式、今天是否需要调仓，并按你的持仓给出具体下单数量和借款风险提醒。不能访问 Binance 时可以用 `--csv` 指定本地日线文件。
+完整的每日操作流程见 [`reports/playbook.md`](reports/playbook.md)。
 
 ## 测试
 

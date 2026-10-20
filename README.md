@@ -10,6 +10,7 @@ money_seeker/
   strategy.py   # 网格策略回测 + 买入持有基准
   signals.py    # 动量 / 均线 / 突破 / 均值回归等择时信号 + 按仓位回测
   research.py   # 多策略样本内选参、样本外检验、跨币种验证
+  universe.py   # 多币种验证周线动量：逐币、安慰剂检验、等权组合
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -109,6 +110,15 @@ python -m money_seeker research --out-dir reports
 使用 Coin Metrics 公开的每日收盘价（托管在 GitHub，无需 API Key），比较网格、时间序列动量、均线交叉、趋势过滤、唐奇安突破、RSI 回归、布林带回归七类策略，日线和周线两个周期都跑。
 流程是：在 BTC 2016–2021 上选参数，在 2022 年至今的 BTC 上检验，再把同一组参数搬到 ETH 上验证。
 结论和图表见 [`reports/README.md`](reports/README.md)。
+
+### 4. 多币种验证周线动量
+
+```bash
+python -m money_seeker universe --out-dir reports
+```
+
+参数固定为周线 4 周动量，在另外 23 个币上逐币对比买入持有，同时做安慰剂检验（循环平移仓位、打乱择时）和等权组合回测。
+结论见 [`reports/universe.md`](reports/universe.md)：**多币种上没有通过**，它更适合作为减小回撤的风控层，而不是收益来源。
 
 ## 测试
 

@@ -115,6 +115,58 @@ def _cmd_research(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_universe(args: argparse.Namespace) -> None:
+    from .universe import EXTRA_ASSETS, equal_weight_portfolio, evaluate_universe
+
+    assets = [a.lower() for a in (args.assets or ("btc", "eth", *EXTRA_ASSETS))]
+    daily = {a: data.load_or_fetch_coinmetrics(a, args.data_dir, args.refresh) for a in assets}
+    table = evaluate_universe(daily, main_lookback=args.lookback,
+                              periods={"oos": (args.oos_start, None), "full": (None, None)})
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_csv(out / "universe_table.csv", index=False)
+
+    held_out = [a for a in assets if a not in ("btc", "eth")]  # 选参时没用过的币
+    sub = table[table["asset"].isin(held_out)]
+    g = sub.groupby(["period", "lookback_w"])
+    summary = pd.DataFrame({
+        "n": g.size(),
+        "profitable": g.apply(lambda x: (x.total_ret > 0).sum()),
+        "beat_bh_return": g.apply(lambda x: (x.total_ret > x.bh_total_ret).sum()),
+        "beat_bh_sharpe": g.apply(lambda x: (x.sharpe > x.bh_sharpe).sum()),
+        "smaller_drawdown": g.apply(lambda x: (x.max_dd > x.bh_max_dd).sum()),
+        "median_sharpe": g["sharpe"].median(),
+        "median_bh_sharpe": g["bh_sharpe"].median(),
+        "median_placebo_pctile": g["placebo_pctile"].median(),
+    })
+    summary.to_csv(out / "universe_summary.csv")
+
+    rows = []
+    for name, exclude in (("held_out", ("btc", "eth")), ("held_out_ex_zec", ("btc", "eth", "zec"))):
+        for start in (args.oos_start, args.long_start):
+            for lb in (4, 8, 13, 26, 52):
+                pf = equal_weight_portfolio(daily, lb, start, exclude=exclude)
+                m, b = summarize(pf["momentum"]), summarize(pf["buy_hold"])
+                rows.append({"universe": name, "start": start, "lookback_w": lb,
+                             "n_assets": pf.attrs["n_assets"],
+                             "total_ret": m["total_return"], "sharpe": m["sharpe"],
+                             "max_dd": m["max_drawdown"], "bh_total_ret": b["total_return"],
+                             "bh_sharpe": b["sharpe"], "bh_max_dd": b["max_drawdown"]})
+                if lb == args.lookback:
+                    plot_equity({"momentum": pf["momentum"], "buy & hold": pf["buy_hold"]},
+                                out / f"universe_portfolio_{name}_{start[:4]}.png",
+                                title=f"Equal-weight {pf.attrs['n_assets']} coins ({name}), "
+                                f"weekly {lb}w momentum, from {start}")
+    portfolio = pd.DataFrame(rows)
+    portfolio.to_csv(out / "universe_portfolio.csv", index=False)
+
+    with pd.option_context("display.width", 250, "display.max_columns", 30,
+                           "display.precision", 2):
+        print(summary.to_string())
+        print(portfolio.to_string(index=False))
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -158,6 +210,17 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
     r.add_argument("--out-dir", default="output/research", help="结果输出目录")
     r.set_defaults(func=_cmd_research)
+
+    u = sub.add_parser("universe", help="多币种验证周线时间序列动量（含安慰剂检验、等权组合）")
+    u.add_argument("--assets", nargs="+", default=None,
+                   help="币种列表，默认 BTC、ETH 加上 universe.EXTRA_ASSETS 中的 23 个币")
+    u.add_argument("--lookback", type=int, default=4, help="主检验的回看周数，默认 4")
+    u.add_argument("--oos-start", default="2022-01-01", help="样本外开始日期")
+    u.add_argument("--long-start", default="2018-08-01", help="长区间组合的开始日期")
+    u.add_argument("--data-dir", default="data", help="数据缓存目录")
+    u.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
+    u.add_argument("--out-dir", default="output/universe", help="结果输出目录")
+    u.set_defaults(func=_cmd_universe)
     return p
 
 

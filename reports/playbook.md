@@ -111,6 +111,42 @@ python -m money_seeker today --btc <BTC 总数> --cash <现金 USD> --debt <借�
   - 两者之间 → 维持原来的模式。
 - 只有模式和昨天不同时才需要操作。
 
+### 用 Kraken 自动读取持仓（只读）
+
+不想每天手动输入 BTC 数量和现金，可以让程序直接读 Kraken 账户余额。
+
+**1. 在 Kraken 创建只读 API 密钥**（一次性）：
+- 登录 Kraken（Kraken Pro 网页版）→ 设置 → **API**（有的版本叫 Connections & API）→ **Create API key**；
+- 名称随意，例如 `money-seeker-readonly`；
+- 权限**只勾选 Funds（资金）下面的 “Query（查询）”**；Deposit、Withdraw、交易下单等**全部不勾**；
+- 可选：限制 IP 为你家里的网络地址，设置到期时间；
+- 创建后会显示 **API Key** 和 **Private Key（私钥）**。私钥只显示一次，复制保存到密码管理器。
+
+**2. 在你的电脑上设置环境变量**（不要写进代码，不要发在聊天里，不要提交到仓库）：
+
+```bash
+# macOS / Linux：在运行命令的终端里执行（只对当前终端有效）
+export KRAKEN_API_KEY='你的 API Key'
+export KRAKEN_API_SECRET='你的 Private Key'
+```
+
+Windows PowerShell：`$env:KRAKEN_API_KEY='...'`、`$env:KRAKEN_API_SECRET='...'`。
+
+**3. 使用**：
+
+```bash
+python -m money_seeker kraken                              # 查看余额和当前 BTC 仓位
+python -m money_seeker today --from-kraken                 # 方案 B 的每日检查，自动带入持仓
+python -m money_seeker today --from-kraken --borrow 0.5 --debt <借款余额>   # 方案 C
+```
+
+**说明**：
+- BTC 包括现货和 Kraken 理财里的 BTC（余额代码带 `.F`、`.B` 等后缀的也算）。注意锁定质押的部分不能马上卖出；
+- 现金包括 USD 和常见美元稳定币（USDT、USDC 等）；其他币种和欧元等单独列出，不计入仓位；
+- 在别的平台的借款读不到，需要用 `--debt` 手动输入；
+- 只读密钥无法下单或提币，就算泄露，别人也只能看到余额。但仍然要妥善保管；
+- **不要把 Kraken 密钥放到 GitHub Secrets、也不要在每周的 GitHub 任务里使用**：仓库和运行日志都是公开的，余额会被所有人看到。每周的 AI 任务是模拟盘，按它自己的历史仓位计算，不需要你的真实持仓。
+
 ---
 
 ## 五、切换日的操作清单

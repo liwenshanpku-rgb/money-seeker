@@ -27,6 +27,12 @@ from pydantic import BaseModel, Field
 
 MODEL = "claude-opus-5-5"
 
+# 用于估算每次调用的费用（美元，Claude Opus 5.5 的公开价格；以实际账单为准）
+PRICE_PER_MTOK = {"input": 4.0, "output": 20.0, "cache_read": 0.20, "cache_write": 5.0}
+PRICE_PER_SEARCH = 0.01
+# 与 BTC 仓位判断无关、但会占用大量 token 的网站（例如 SEC 的 ETF 季度报告全文）
+BLOCKED_DOMAINS = ["sec.gov"]
+
 # ---------------------------------------------------------------- 输出结构
 
 DECISION_SCHEMA = {
@@ -253,12 +259,19 @@ class ModelAnswer:
 
 def ask_claude(
     client, system: str, user: str, model: str = MODEL, effort: str = "high",
-    max_searches: int = 15, max_fetches: int = 8, max_continuations: int = 5,
+    max_searches: int = 12, max_fetches: int = 6, max_fetch_tokens: int = 6000,
+    max_continuations: int = 5,
 ) -> ModelAnswer:
-    """一次完整的 Claude 调用：网络搜索 + 网页抓取 + 结构化输出，处理 pause_turn 与拒答。"""
+    """一次完整的 Claude 调用：网络搜索 + 网页抓取 + 结构化输出，处理 pause_turn 与拒答。
+
+    控制费用：开启提示缓存（服务端工具循环的每一步都会重读整个上下文，缓存后按 1/20 计费），
+    限制每个网页读入的 token 数，并屏蔽无关的大文档网站。
+    """
     messages = [{"role": "user", "content": user}]
-    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches},
-             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": max_fetches}]
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches,
+              "blocked_domains": BLOCKED_DOMAINS},
+             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": max_fetches,
+              "max_content_tokens": max_fetch_tokens, "blocked_domains": BLOCKED_DOMAINS}]
     for _ in range(max_continuations + 1):
         with client.beta.messages.stream(
             model=model,
@@ -271,6 +284,7 @@ def ask_claude(
                            "format": {"type": "json_schema", "schema": DECISION_SCHEMA}},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",  # 被安全策略拒答时由服务端自动换模型重试
+            cache_control={"type": "ephemeral"},  # 自动缓存；搜索结果之后服务端也会自动写缓存
         ) as stream:
             response = stream.get_final_message()
         if response.stop_reason == "pause_turn":  # 服务端搜索轮数用完，原样续上
@@ -290,10 +304,24 @@ def ask_claude(
     for b in response.content:
         if getattr(b, "type", None) == "web_search_tool_result" and isinstance(b.content, list):
             sources += [{"title": getattr(r, "title", ""), "url": getattr(r, "url", "")} for r in b.content]
-    usage = getattr(response, "usage", None)
-    usage_d = {k: getattr(usage, k, None) for k in ("input_tokens", "output_tokens",
-                                                     "cache_read_input_tokens")} if usage else {}
-    return ModelAnswer(decision, sources, response.stop_reason, getattr(response, "model", model), usage_d)
+    return ModelAnswer(decision, sources, response.stop_reason, getattr(response, "model", model),
+                       usage_summary(getattr(response, "usage", None)))
+
+
+def usage_summary(usage) -> dict:
+    """token 用量、服务端工具调用次数和估算费用。"""
+    if usage is None:
+        return {}
+    d = {k: getattr(usage, k, None) or 0 for k in ("input_tokens", "output_tokens",
+                                                   "cache_read_input_tokens", "cache_creation_input_tokens")}
+    stu = getattr(usage, "server_tool_use", None)
+    d["web_search_requests"] = getattr(stu, "web_search_requests", 0) or 0 if stu else 0
+    d["web_fetch_requests"] = getattr(stu, "web_fetch_requests", 0) or 0 if stu else 0
+    cost = (d["input_tokens"] * PRICE_PER_MTOK["input"] + d["output_tokens"] * PRICE_PER_MTOK["output"]
+            + d["cache_read_input_tokens"] * PRICE_PER_MTOK["cache_read"]
+            + d["cache_creation_input_tokens"] * PRICE_PER_MTOK["cache_write"]) / 1e6
+    d["estimated_cost_usd"] = round(cost + d["web_search_requests"] * PRICE_PER_SEARCH, 3)
+    return d
 
 
 # ---------------------------------------------------------------- 护栏
@@ -372,6 +400,7 @@ def decide(
         "confidence": main.decision.confidence, "stance": main.decision.stance,
         "decision": main.decision.model_dump(), "sources": main.sources[:20],
         "snapshot": snapshot, "usage": main.usage,
+        "estimated_cost_usd": round(sum(a.usage.get("estimated_cost_usd", 0) for a in answers), 3),
     }
     if write:
         append_journal(journal_path, record)
@@ -404,6 +433,12 @@ def format_decision(rec: dict, order: dict | None = None) -> str:
         "改变决定的条件:", *[f"  - {t}" for t in d["change_triggers"]],
         f"建议 {d['review_in_days']} 天后重新评估",
     ]
+    if rec.get("estimated_cost_usd") is not None:
+        u = rec.get("usage", {})
+        lines.append(f"本次估算费用: ${rec['estimated_cost_usd']:.2f}（输入 {u.get('input_tokens', 0):,} / 缓存读取 "
+                     f"{u.get('cache_read_input_tokens', 0):,} / 缓存写入 {u.get('cache_creation_input_tokens', 0):,} / "
+                     f"输出 {u.get('output_tokens', 0):,} token，搜索 {u.get('web_search_requests', 0)} 次，"
+                     f"抓取 {u.get('web_fetch_requests', 0)} 次）")
     if rec["guardrail_notes"]:
         lines += ["护栏调整:", *[f"  ! {n}" for n in rec["guardrail_notes"]]]
     if order:

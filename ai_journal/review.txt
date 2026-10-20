@@ -1,0 +1,8 @@
+区间: 2026-10-19 ~ 2026-10-19（1 天，1 次决定）
+平均 AI 仓位: 100%
+               total_return  max_drawdown  sharpe
+ai                      0.0           0.0     NaN
+buy_hold                0.0           0.0     NaN
+core50_sma200           0.0           0.0     NaN
+! 样本不到半年，结果主要是噪音，不要据此下结论。
+图: /home/runner/work/money-seeker/money-seeker/journal/ai_journal/review.png

@@ -221,6 +221,81 @@ def _cmd_rotation(args: argparse.Namespace) -> None:
     print(f"输出目录: {out.resolve()}")
 
 
+def _cmd_funding(args: argparse.Namespace) -> None:
+    from .funding import (
+        CARRY_GRID, TIMING_FUNCS, TIMING_GRID, carry_positions, daily, daily_funding,
+        load_funding, run_carry, shift_placebo, tbill_curve, timing_equity,
+    )
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    is_period, oos_period = (args.is_start, args.is_end), (args.oos_start, args.oos_end)
+    coins, exchanges = ("BTC", "ETH"), ("binance", "bybit", "gate")
+    rates = {(c, e): load_funding(c, e, args.data_dir, args.refresh) for c in coins for e in exchanges}
+
+    # A1. 常开期现套利：逐年收益
+    rows, curves = [], {}
+    for (c, e), r in rates.items():
+        for nf in (0.5, 1.0):
+            eq = daily(run_carry(r, carry_positions(r, None, 0.0, 0.0), notional=nf))
+            yr = pd.concat([pd.Series([1.0], index=[eq.index[0] - pd.Timedelta(days=1)]),
+                            eq.resample("YE").last()]).pct_change().iloc[1:]
+            rows.append({"coin": c, "exchange": e, "notional": nf,
+                         **{str(d.year): v for d, v in yr.items()},
+                         "worst_30d": float((eq / eq.shift(30) - 1).min())})
+            if nf == 1.0:
+                curves[f"{c} {e}"] = eq
+    pd.DataFrame(rows).to_csv(out / "funding_carry_yearly.csv", index=False)
+    first = min(v.index[0] for v in curves.values())
+    curves["T-bill"] = tbill_curve(pd.date_range(first, max(v.index[-1] for v in curves.values())))
+    plot_equity(curves, out / "funding_carry.png",
+                title="Cash-and-carry, always on, notional = 1x capital per leg")
+
+    # A2. 条件开关 vs 常开（Binance BTC，样本内 / 样本外）
+    r = rates[(args.coin, "binance")]
+    rows = []
+    for prm in CARRY_GRID:
+        pos = carry_positions(r, **prm)
+        row = {k: v for k, v in prm.items()}
+        for name, (s, e) in (("IS", is_period), ("OOS", oos_period)):
+            st = summarize(daily(run_carry(r.loc[s:e], pos.loc[s:e])))
+            row |= {f"{name}_ann_ret": st["annual_return"], f"{name}_max_dd": st["max_drawdown"],
+                    f"{name}_time_on": float(pos.loc[s:e].mean())}
+        rows.append(row)
+    pd.DataFrame(rows).to_csv(out / "funding_carry_grid.csv", index=False)
+
+    # B. 资金费率择时（现货）
+    closes = {c: data.load_or_fetch_coinmetrics(c.lower(), args.data_dir)["close"] for c in coins}
+    fd = {c: daily_funding(rates[(c, "binance")]) for c in coins}
+    rows = []
+    for fam, prm in TIMING_GRID:
+        row = {"family": fam, "params": json.dumps(prm)}
+        for c in coins:
+            for name, (s, e) in (("IS", is_period), ("OOS", oos_period)):
+                st = summarize(timing_equity(closes[c], fd[c], fam, prm, s, e))
+                bh = summarize(closes[c].loc[s:e])
+                pos = TIMING_FUNCS[fam](fd[c], **prm).loc[s:e]
+                row |= {f"{c}_{name}_ret": st["total_return"], f"{c}_{name}_sharpe": st["sharpe"],
+                        f"{c}_{name}_bh_ret": bh["total_return"], f"{c}_{name}_bh_sharpe": bh["sharpe"],
+                        f"{c}_{name}_exposure": float(pos.mean())}
+        rows.append(row)
+    timing = pd.DataFrame(rows)
+    best = timing.sort_values(f"{args.coin}_IS_sharpe", ascending=False).iloc[0]
+    fam, prm = best["family"], json.loads(best["params"])
+    placebo = {f"{c}_{name}": shift_placebo(closes[c], TIMING_FUNCS[fam](fd[c], **prm), s, e)[0]
+               for c in coins for name, (s, e) in (("IS", is_period), ("OOS", oos_period))}
+    timing.to_csv(out / "funding_timing.csv", index=False)
+    (out / "funding_timing_selected.json").write_text(json.dumps(
+        {"family": fam, "params": prm, "placebo_pctile": placebo,
+         **{k: float(v) for k, v in best.items() if k not in ("family", "params")}},
+        indent=2, ensure_ascii=False))
+
+    with pd.option_context("display.width", 250, "display.max_columns", 30, "display.precision", 4):
+        print(pd.read_csv(out / "funding_carry_yearly.csv").to_string(index=False))
+        print(f"择时：样本内选出 {fam} {prm}，安慰剂分位 {placebo}")
+    print(f"输出目录: {out.resolve()}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -288,6 +363,17 @@ def build_parser() -> argparse.ArgumentParser:
     ro.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
     ro.add_argument("--out-dir", default="output/rotation", help="结果输出目录")
     ro.set_defaults(func=_cmd_rotation)
+
+    fu = sub.add_parser("funding", help="资金费率策略：期现套利 + 资金费率择时")
+    fu.add_argument("--coin", default="BTC", choices=("BTC", "ETH"), help="用于选参数的币，默认 BTC")
+    fu.add_argument("--is-start", default="2020-01-15", help="样本内开始")
+    fu.add_argument("--is-end", default="2021-12-31", help="样本内结束")
+    fu.add_argument("--oos-start", default="2022-01-01", help="样本外开始")
+    fu.add_argument("--oos-end", default="2023-12-31", help="样本外结束（资金费率数据到 2023 年底）")
+    fu.add_argument("--data-dir", default="data", help="数据缓存目录")
+    fu.add_argument("--refresh", action="store_true", help="忽略缓存重新拉数据")
+    fu.add_argument("--out-dir", default="output/funding", help="结果输出目录")
+    fu.set_defaults(func=_cmd_funding)
     return p
 
 

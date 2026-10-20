@@ -12,6 +12,7 @@ money_seeker/
   research.py   # 多策略样本内选参、样本外检验、跨币种验证
   universe.py   # 多币种验证周线动量：逐币、安慰剂检验、等权组合
   rotation.py   # 横截面动量轮动：组合回测引擎、参数扫描、随机选币安慰剂
+  funding.py    # 资金费率：期现套利、资金费率择时
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -130,6 +131,17 @@ python -m money_seeker rotation --universe 25 --exclude zec --out-dir reports
 
 每周持有过去 L 周涨幅前 K 名的币。在样本内选参数、样本外检验，并用随机选币做安慰剂对照。
 结论见 [`reports/rotation.md`](reports/rotation.md)：**样本外失败**。在幸存者偏差更小的 42 币池上亏 62%，54 组参数里只有 2 组盈利。
+
+### 6. 资金费率策略
+
+```bash
+python -m money_seeker funding --out-dir reports
+```
+
+数据为 BTC、ETH 永续合约在 Binance / Bybit / Gate 上 2020–2023 年的 8 小时资金费率（GitHub 公开数据）。测试了两类策略：期现套利（常开 / 条件开关）和资金费率择时。
+结论见 [`reports/funding.md`](reports/funding.md)：
+- **常开期现套利每年都赚钱**，但熊市里收益接近美债，主要风险是交易所倒闭和强平；
+- 条件开关和资金费率择时都没有带来改进。
 
 ## 测试
 

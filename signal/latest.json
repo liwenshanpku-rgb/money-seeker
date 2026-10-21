@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-21T07:27:03+00:00",
+  "as_of_close_utc": "2026-10-20",
+  "price": 82936.1,
+  "price_source": "kraken XBTUSD 1d",
+  "plan_b": {
+    "mode": "UP",
+    "mode_since": "2026-08-20",
+    "switched_today": false,
+    "target_pct": 100.0,
+    "sma": 72649.37,
+    "upper": 74828.85,
+    "lower": 70469.89,
+    "distance_to_switch": -0.150311,
+    "params": {
+      "core": 0.5,
+      "sma_days": 200,
+      "band": 0.03
+    }
+  },
+  "plan_c": {
+    "target_pct": 125.0,
+    "borrow_frac": 0.5
+  },
+  "ai": {
+    "target_pct": 85,
+    "as_of_close_utc": "2026-10-19",
+    "decided_at": "2026-10-20T22:57:29+00:00",
+    "confidence": "low",
+    "stance": "我建议把仓位从 100% 小幅降到 85%，暂不加杠杆。趋势仍处于上涨模式，链上底部也还撑得住。但宏观在收紧，美联储还在加息周期里，CPI 偏高，10 年期美债收益率在 5.1% 以上。ETF 买盘也不稳。现价正好压在约 8.15 万美元的 ETF 成本支撑上，10 月 28 日议息会议和 11 月 3 日中期选举又挨得很近，所以先降一点风险，不做大幅调整。",
+    "age_days": 2,
+    "stale": false
+  }
+}

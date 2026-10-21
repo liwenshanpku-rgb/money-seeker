@@ -19,7 +19,9 @@ money_seeker/
   btc_loan.py   # 抵押 BTC 借款：强平概率、借钱加仓、只在上涨趋势里借款
   today.py      # 每日执行助手：当前模式、调仓指令、LTV 提醒
   ai_advisor.py # AI 仓位顾问：Claude 联网综合判断、护栏、决策日志、模拟盘评估
-  kraken.py     # Kraken 只读同步：余额、当前 BTC 仓位
+  kraken.py     # Kraken 只读同步：余额、当前 BTC 仓位、公开日线
+  brief.py      # 本地每日简报：方案 B + AI 决定 + 真实持仓，Bark 推送，信号文件
+  notify.py     # Bark 推送
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）
   cli.py        # 命令行入口
@@ -214,6 +216,15 @@ python -m money_seeker today --from-kraken          # 每日检查自动带入�
 ```
 
 只在本地使用，不要放进公开的 GitHub 任务。设置步骤见 [`reports/playbook.md`](reports/playbook.md)。
+
+### 每日简报（本地 + Bark 推送）
+
+```bash
+cp .env.example .env                     # 填 Kraken 只读密钥和 Bark 配置
+python -m money_seeker brief --always-push   # 测试推送
+```
+
+每天运行一次（Windows 任务计划程序用 `deploy/brief.bat`，macOS / Linux 的 cron 用 `deploy/brief.sh`）：结合 Kraken 持仓、方案 B 和 AI 最新决定。方案 B 切换或 LTV 告警时紧急推送，AI 有新决定或每周一时普通推送，并写入本地信号文件 `state/latest_signal.json`。设置步骤见 [`reports/playbook.md`](reports/playbook.md)。
 
 ### 12. AI 仓位顾问（实验）
 

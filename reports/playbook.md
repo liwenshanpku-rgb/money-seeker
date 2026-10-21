@@ -147,6 +147,64 @@ python -m money_seeker today --from-kraken --borrow 0.5 --debt <借款余额>   
 - 只读密钥无法下单或提币，就算泄露，别人也只能看到余额。但仍然要妥善保管；
 - **不要把 Kraken 密钥放到 GitHub Secrets、也不要在每周的 GitHub 任务里使用**：仓库和运行日志都是公开的，余额会被所有人看到。每周的 AI 任务是模拟盘，按它自己的历史仓位计算，不需要你的真实持仓。
 
+### 每日简报自动推送（本地运行 + Bark）
+
+在你自己的电脑上每天运行一次 `python -m money_seeker brief`。它会读 Kraken 持仓、判断方案 B 的模式、取 AI 顾问的最新决定，算出两种方案各需要买卖多少，然后通过你自建的 Bark 推送到手机。只读，不下单。
+
+**什么时候推送**（其余日子只写本地文件，不打扰）：
+
+| 情况 | 推送方式 |
+| --- | --- |
+| 方案 B 当天切换上涨 / 下跌模式 | **紧急推送**（穿透专注模式），附具体买卖数量 |
+| 借款 LTV ≥ 35% / 45% | **紧急推送** |
+| AI 顾问出了新决定（通常每周一） | 普通推送，附相对当前持仓要买卖多少 |
+| AI 决定超过 9 天没更新（每周任务可能失败了） | 普通推送 |
+| 每周一 | 普通推送一次汇总 |
+
+**一次性设置**：
+
+1. 拉取代码并安装：
+   ```bash
+   git pull          # 或 git clone https://github.com/liwenshanpku-rgb/money-seeker
+   python -m venv venv
+   venv\Scripts\pip install -r requirements.txt        # Windows
+   ./venv/bin/pip install -r requirements.txt           # macOS / Linux
+   ```
+2. 在项目根目录把 `.env.example` 复制成 `.env`，填上 Kraken 只读密钥，以及和 `pm-maker`、`schwab-bot` 相同的 `BARK_URL`、`BARK_DEVICE_KEY`。`.env` 已在 `.gitignore` 里，不会被提交。
+3. 测试一次（会强制推送一条到手机）：
+   ```bash
+   python -m money_seeker brief --always-push
+   ```
+4. 设成每天自动运行。BTC 日线在 UTC 0 点收盘（北京时间 08:00），建议在收盘后 45 分钟左右运行。下面按北京时间写；如果电脑在别的时区，换算成当地时间：
+   - **Windows**（任务计划程序）：
+     ```bat
+     schtasks /Create /TN "money-seeker-brief" /TR "\"<项目路径>\deploy\brief.bat\"" /SC DAILY /ST 08:45
+     ```
+     然后在“任务计划程序”里打开这个任务 → 设置 → 勾选“**如果过了计划开始时间，立即启动任务**”，这样电脑关机错过的那天，开机后会补跑一次。
+   - **macOS / Linux**（cron，`crontab -e` 加一行）：
+     ```
+     45 8 * * * <项目路径>/deploy/brief.sh
+     ```
+   运行日志写在 `state/brief.log`。
+
+**有借款时**（方案 C）：`deploy/brief.bat` / `brief.sh` 里的命令改成 `python -m money_seeker brief --borrow 0.5 --debt <借款余额>`。借款余额变化时记得更新。
+
+**给其他本地程序用的信号文件** `state/latest_signal.json`（每次运行都会更新，只在本机）：
+
+```json
+{
+  "generated_at": "...", "price": 81938.4, "as_of_close_utc": "2026-10-19",
+  "holdings": {"btc": 1.0, "cash_usd": 0, "debt_usd": 0, "equity_usd": 81938.4, "btc_pct": 100.0, "ltv": 0.0},
+  "plan_b": {"mode": "UP", "switched_today": false, "target_pct": 100.0, "sma": 72609.7,
+             "upper": 74788.0, "lower": 70431.4, "actions": ["无需交易。"], "alerts": []},
+  "ai": {"as_of_close_utc": "2026-10-19", "target_pct": 85, "confidence": "low", "age_days": 1,
+         "stale": false, "orders": {"trade_btc": -0.15, "target_btc": 0.85, "...": "..."}},
+  "reasons": ["AI 顾问有新决定"], "pushed": true
+}
+```
+
+以后如果要做自动下单，执行程序只读这个文件，再加上自己的风控和多重开关（例如 `pm-maker` 的干跑开关 + 确认文件），两个项目不需要互相引用代码。
+
 ---
 
 ## 五、切换日的操作清单

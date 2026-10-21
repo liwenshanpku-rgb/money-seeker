@@ -781,6 +781,29 @@ def _cmd_kraken(args: argparse.Namespace) -> None:
         print("（其他资产不计入 BTC 仓位和现金；如有需要请换成 USD 或稳定币）")
 
 
+def _cmd_brief(args: argparse.Namespace) -> None:
+    from . import brief, kraken
+    from .today import Plan
+
+    if args.csv:
+        close = data.load_csv(args.csv)["close"]
+    else:
+        try:
+            close = kraken.daily_closes()
+        except (kraken.KrakenError, OSError) as err:
+            raise SystemExit(f"获取 Kraken 日线失败：{err}")
+    h = _kraken_holdings()
+    plan = Plan(core=args.core, sma_days=args.sma, band=args.band, borrow_frac=args.borrow)
+    sig = brief.run(close, h.btc, h.cash_usd, args.debt, plan, state_dir=args.state_dir,
+                    push=not args.no_push, always_push=args.always_push)
+    print(sig["message"]["title"])
+    print(sig["message"]["body"])
+    if h.other:
+        print("（未计入的其他资产：" + ", ".join(f"{k} {v:g}" for k, v in sorted(h.other.items())) + "）")
+    status = "已推送" if sig["pushed"] else ("不需要推送" if not sig["reasons"] else "未推送（--no-push 或 Bark 未配置 / 推送失败）")
+    print(f"推送: {status}；信号文件: {Path(args.state_dir).resolve() / 'latest_signal.json'}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -934,10 +957,28 @@ def build_parser() -> argparse.ArgumentParser:
     kr = sub.add_parser("kraken", help="Kraken 只读同步：显示 BTC、美元及稳定币余额和当前 BTC 仓位")
     kr.add_argument("--debt", type=float, default=0.0, help="Kraken 之外的借款（USD），用于计算仓位")
     kr.set_defaults(func=_cmd_kraken)
+
+    br = sub.add_parser("brief", help="本地每日简报：Kraken 持仓 + 方案 B + AI 最新决定，通过 Bark 推送")
+    br.add_argument("--debt", type=float, default=0.0, help="Kraken 之外的借款余额（USD）")
+    br.add_argument("--borrow", type=float, default=0.0, help="方案 C 的借款比例（核心价值 × 该值），方案 B 用 0")
+    br.add_argument("--core", type=float, default=0.5, help="永远持有的比例，默认 0.5")
+    br.add_argument("--sma", type=int, default=200, help="均线天数，默认 200")
+    br.add_argument("--band", type=float, default=0.03, help="缓冲区，默认 0.03")
+    br.add_argument("--csv", help="改用本地日线 CSV（默认 Kraken 公开日线）")
+    br.add_argument("--state-dir", default="state", help="信号文件和推送状态的目录")
+    br.add_argument("--no-push", action="store_true", help="只计算和打印，不推送")
+    br.add_argument("--always-push", action="store_true", help="即使没有新情况也推送一次（测试用）")
+    br.set_defaults(func=_cmd_brief)
     return p
 
 
 def main(argv: list[str] | None = None) -> None:
+    try:  # 读取本项目目录下的 .env（密钥、Bark 配置），和 pm-maker 的习惯一致
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
     args = build_parser().parse_args(argv)
     args.func(args)
 

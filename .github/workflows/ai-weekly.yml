@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ai-weekly
+  group: ai-journal   # 和每日信号共用：两个任务都往 ai-journal 分支提交，不能同时跑
   cancel-in-progress: false
 
 env:

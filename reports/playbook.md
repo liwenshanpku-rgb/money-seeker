@@ -203,7 +203,7 @@ python -m money_seeker today --from-kraken --borrow 0.5 --debt <借款余额>   
 }
 ```
 
-以后如果要做自动下单，执行程序只读这个文件，再加上自己的风控和多重开关（例如 `pm-maker` 的干跑开关 + 确认文件），两个项目不需要互相引用代码。
+自动下单程序（例如 schwab 项目）请改读 GitHub 上每天发布的公开信号 `signal/latest.json`（不含持仓，见 [`signal.md`](signal.md)），再用自己读到的 Kraken 余额算下单数量，加上自己的风控和多重开关（例如 `pm-maker` 的干跑开关 + 确认文件）。两个项目不需要互相引用代码。
 
 ---
 

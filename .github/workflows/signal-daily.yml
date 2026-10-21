@@ -1,0 +1,59 @@
+# 每天日线收盘后发布公开信号 signal/latest.json（提交到 ai-journal 分支），供本地下单程序读取。
+# 只用 Kraken 公开日线和 AI 决策日志，不需要任何密钥，也不含任何持仓。
+# 字段说明：reports/signal.md；读取示例：examples/read_signal.py
+name: Daily public signal
+
+on:
+  schedule:
+    - cron: "45 0 * * *"   # 每天 00:45 UTC（北京时间 08:45）；周一排在 AI 周更之后
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-journal
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Load journal branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin ai-journal
+          git worktree add -B ai-journal journal origin/ai-journal
+
+      - name: Build signal
+        run: |
+          J=journal/ai_journal/decisions.jsonl
+          AI="--no-ai"
+          if [ -s "$J" ]; then AI="--ai-journal $J"; fi
+          python -m money_seeker signal $AI --out journal/signal/latest.json \
+            --history journal/signal/history.jsonl
+          { echo '```json'; cat journal/signal/latest.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit signal
+        run: |
+          cd journal
+          git add signal
+          git commit -m "Signal $(date -u +%F)"
+          for i in 1 2 3; do
+            git push origin ai-journal && exit 0
+            sleep $((i * 5)); git pull --rebase origin ai-journal
+          done
+          exit 1

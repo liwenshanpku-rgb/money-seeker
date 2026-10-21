@@ -804,6 +804,51 @@ def _cmd_brief(args: argparse.Namespace) -> None:
     print(f"推送: {status}；信号文件: {Path(args.state_dir).resolve() / 'latest_signal.json'}")
 
 
+def _cmd_signal(args: argparse.Namespace) -> None:
+    import json
+
+    from . import brief, kraken, publish
+
+    if args.csv:
+        close = data.load_csv(args.csv)["close"]
+    else:
+        try:
+            close = kraken.daily_closes()
+        except (kraken.KrakenError, OSError) as err:
+            raise SystemExit(f"获取 Kraken 日线失败：{err}")
+    if args.no_ai:
+        ai = None
+    elif not args.ai_journal or args.ai_journal.startswith("http"):
+        ai = brief.fetch_ai_decision(args.ai_journal or brief.AI_JOURNAL_URL)
+    else:
+        ai = _last_journal_entry(args.ai_journal)
+    try:
+        sig = publish.build(close, ai, max_close_age_days=args.max_close_age)
+    except publish.StaleData as err:
+        raise SystemExit(f"不发布：{err}")
+    text = json.dumps(sig, ensure_ascii=False, indent=2)
+    print(text)
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text + "\n")
+    if args.history:
+        hist = Path(args.history)
+        hist.parent.mkdir(parents=True, exist_ok=True)
+        with hist.open("a") as f:
+            f.write(json.dumps(sig, ensure_ascii=False) + "\n")
+
+
+def _last_journal_entry(path: str) -> dict | None:
+    import json
+
+    p = Path(path)
+    if not p.exists():
+        return None
+    lines = [line for line in p.read_text().splitlines() if line.strip()]
+    return json.loads(lines[-1]) if lines else None
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="money_seeker", description="虚拟币日线网格策略回测")
     sub = p.add_subparsers(dest="command", required=True)
@@ -969,6 +1014,15 @@ def build_parser() -> argparse.ArgumentParser:
     br.add_argument("--no-push", action="store_true", help="只计算和打印，不推送")
     br.add_argument("--always-push", action="store_true", help="即使没有新情况也推送一次（测试用）")
     br.set_defaults(func=_cmd_brief)
+
+    sg = sub.add_parser("signal", help="公开信号文件（不含持仓）：方案 B / C 目标仓位 + AI 最新决定，供本地下单程序读取")
+    sg.add_argument("--out", help="写入 JSON 文件，例如 signal/latest.json")
+    sg.add_argument("--history", help="同时追加一行到历史文件，例如 signal/history.jsonl")
+    sg.add_argument("--ai-journal", help="AI 决策日志：本地 decisions.jsonl 路径或 URL，默认 GitHub 上公开的 ai-journal")
+    sg.add_argument("--no-ai", action="store_true", help="不带 AI 决定")
+    sg.add_argument("--csv", help="改用本地日线 CSV（默认 Kraken 公开日线）")
+    sg.add_argument("--max-close-age", type=int, default=1, help="最新收盘距今超过多少天就拒绝发布，默认 1")
+    sg.set_defaults(func=_cmd_signal)
     return p
 
 

@@ -5,3 +5,5 @@ __pycache__/
 data/
 output/
 ai_journal/
+.env
+state/

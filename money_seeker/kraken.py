@@ -70,6 +70,24 @@ def btc_price(pair: str = "XBTUSD", timeout: float = 15.0) -> float:
     return float(ticker["c"][0])  # 最新成交价
 
 
+def daily_closes(pair: str = "XBTUSD", timeout: float = 15.0):
+    """Kraken 公开日线收盘价（最多约 720 天），去掉还没收盘的当天 K 线。
+
+    索引按本项目的约定：D 日的收盘价 = D+1 日 00:00 UTC 的价格，标签为 D。
+    """
+    import pandas as pd
+
+    resp = requests.get(f"{API_URL}/0/public/OHLC", params={"pair": pair, "interval": 1440}, timeout=timeout)
+    resp.raise_for_status()
+    body = resp.json()
+    if body.get("error"):
+        raise KrakenError(f"Kraken 返回错误：{', '.join(body['error'])}")
+    rows = next(v for k, v in body["result"].items() if k != "last")
+    rows = rows[:-1]  # 最后一根是还在进行中的当天 K 线
+    idx = pd.to_datetime([int(r[0]) for r in rows], unit="s")
+    return pd.Series([float(r[4]) for r in rows], index=idx.rename("date"), name="close")
+
+
 @dataclass
 class Holdings:
     btc: float

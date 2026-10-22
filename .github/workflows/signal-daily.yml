@@ -8,6 +8,7 @@ name: Daily public signal
 on:
   schedule:
     - cron: "45 0 * * *"   # 每天 00:45 UTC（北京时间 08:45）
+    - cron: "17 2 * * 1"   # 周一再跑一次（北京时间 10:17），带上 Claude Code 定时任务刚记录的 AI 决定
   workflow_dispatch:
 
 permissions:

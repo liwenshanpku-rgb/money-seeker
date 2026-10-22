@@ -245,7 +245,7 @@ python -m money_seeker ai --btc 1.0             # 由 Claude 联网查资料后�
 python -m money_seeker ai-review                # 按决策日志做模拟盘，与买入持有和方案 B 对比
 ```
 
-需要 Claude API 凭据（`ant auth login` 或 `ANTHROPIC_API_KEY`）。AI 的决定无法用历史数据回测，只能从今天起记录、前向验证。用法、护栏、费用和验证方式见 [`reports/ai.md`](reports/ai.md)。
+`ai` 命令需要 Claude API 凭据（`ant auth login` 或 `ANTHROPIC_API_KEY`）。每周的定时决策改由 Claude Code 定时任务完成，使用订阅额度，不走 API（`ai-snapshot` / `ai-prompt` / `ai-record`）。AI 的决定无法用历史数据回测，只能从今天起记录、前向验证。用法、护栏、费用和验证方式见 [`reports/ai.md`](reports/ai.md)。
 
 ## 测试
 

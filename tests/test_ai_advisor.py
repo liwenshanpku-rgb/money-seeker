@@ -1,9 +1,11 @@
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace as NS
 
 import numpy as np
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 import money_seeker.ai_advisor as A
 
@@ -165,3 +167,38 @@ def test_usage_summary_cost_estimate():
     assert u["estimated_cost_usd"] == pytest.approx(0.48)
     assert u["web_fetch_requests"] == 4
     assert A.usage_summary(None) == {}
+
+
+def _snap(as_of="2026-10-25", mode="UP"):
+    return {"as_of_close_utc": as_of, "btc_close_usd": 80000.0, "trend_rule_mode": mode}
+
+
+ANSWER = {"target_position_pct": 120, "confidence": "low", "stance": "测试",
+          "key_factors": [{"factor": "ETF", "signal": "bearish", "weight": "high", "evidence": "x"}],
+          "main_risks": ["r"], "change_triggers": ["t"], "review_in_days": 7}
+
+
+def test_record_from_answer_applies_guardrails_and_dedupes(tmp_path):
+    j = tmp_path / "d.jsonl"
+    A.append_journal(j, {"as_of_close_utc": "2026-10-18", "final_pct": 85})
+    now = datetime(2026, 10, 26, 1, 20, tzinfo=timezone.utc)
+    rec = A.record_from_answer(ANSWER, _snap(), j, now=now)
+    assert rec["previous_pct"] == 85 and rec["model_pct"] == 120 and rec["final_pct"] == 110  # 单次最多 +25
+    assert rec["model"] == A.ROUTINE_MODEL and rec["estimated_cost_usd"] is None
+    assert len(A.read_journal(j)) == 2
+    with pytest.raises(ValueError, match="已经记录过"):
+        A.record_from_answer(ANSWER, _snap(), j, now=now)
+    assert "订阅额度" in A.format_decision(rec)
+
+
+def test_record_from_answer_rejects_stale_snapshot_and_bad_json(tmp_path):
+    now = datetime(2026, 10, 26, 1, 20, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="快照"):
+        A.record_from_answer(ANSWER, _snap("2026-10-20"), tmp_path / "d.jsonl", now=now)
+    with pytest.raises(ValidationError):
+        A.record_from_answer({**ANSWER, "target_position_pct": 300}, _snap(), tmp_path / "d.jsonl", now=now)
+
+
+def test_routine_prompt_has_rules_input_and_schema():
+    text = A.routine_prompt(_snap(), [], None)
+    assert A.SYSTEM_PROMPT in text and "target_position_pct" in text and "2026-10-25" in text

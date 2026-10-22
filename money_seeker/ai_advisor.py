@@ -371,13 +371,36 @@ def append_journal(path: str | Path, record: dict) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def build_record(
+    snapshot: dict, decisions: list[Decision], previous_pct: float | None, guardrails: Guardrails,
+    model: str, effort: str | None = None, sources: list[dict] | None = None, usage: dict | None = None,
+    estimated_cost_usd: float | None = None, now: datetime | None = None,
+) -> dict:
+    """把一次或多次模型回答汇总成一条日志记录：取中位数 → 护栏。"""
+    pcts = [d.target_position_pct for d in decisions]
+    model_pct = statistics.median(pcts)
+    main = min(decisions, key=lambda d: abs(d.target_position_pct - model_pct))  # 最接近中位数的那次作说明
+    final_pct, notes = apply_guardrails(model_pct, previous_pct, snapshot["trend_rule_mode"] == "UP", guardrails)
+    return {
+        "decided_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
+        "as_of_close_utc": snapshot["as_of_close_utc"],
+        "btc_close_usd": snapshot["btc_close_usd"],
+        "model": model, "effort": effort, "samples": pcts,
+        "model_pct": model_pct, "previous_pct": previous_pct, "final_pct": final_pct,
+        "guardrail_notes": notes, "guardrails": asdict(guardrails),
+        "confidence": main.confidence, "stance": main.stance,
+        "decision": main.model_dump(), "sources": (sources or [])[:20],
+        "snapshot": snapshot, "usage": usage or {}, "estimated_cost_usd": estimated_cost_usd,
+    }
+
+
 def decide(
     client, close: pd.Series, journal_path: str | Path, funding: pd.Series | None = None,
     tbill: float | None = None, current_pct: float | None = None, samples: int = 1,
     guardrails: Guardrails | None = None, model: str = MODEL, effort: str = "high",
     write: bool = True, funding_source: str = "hyperliquid", open_interest: dict | None = None,
 ) -> dict:
-    """完整的一次决策：快照 → Claude（可多次采样取中位数）→ 护栏 → 写日志。"""
+    """完整的一次决策（Claude API）：快照 → Claude（可多次采样取中位数）→ 护栏 → 写日志。"""
     g = guardrails or Guardrails()
     history = read_journal(journal_path)
     snapshot = market_snapshot(close, funding, tbill, funding_source=funding_source,
@@ -385,25 +408,50 @@ def decide(
     previous_pct = current_pct if current_pct is not None else (history[-1]["final_pct"] if history else None)
     user = build_user_prompt(snapshot, history, previous_pct)
     answers = [ask_claude(client, SYSTEM_PROMPT, user, model=model, effort=effort) for _ in range(samples)]
-    pcts = [a.decision.target_position_pct for a in answers]
-    model_pct = statistics.median(pcts)
-    # 用最接近中位数的那次回答作为说明
+    model_pct = statistics.median([a.decision.target_position_pct for a in answers])
     main = min(answers, key=lambda a: abs(a.decision.target_position_pct - model_pct))
-    final_pct, notes = apply_guardrails(model_pct, previous_pct, snapshot["trend_rule_mode"] == "UP", g)
-    record = {
-        "decided_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "as_of_close_utc": snapshot["as_of_close_utc"],
-        "btc_close_usd": snapshot["btc_close_usd"],
-        "model": main.model, "effort": effort, "samples": pcts,
-        "model_pct": model_pct, "previous_pct": previous_pct, "final_pct": final_pct,
-        "guardrail_notes": notes, "guardrails": asdict(g),
-        "confidence": main.decision.confidence, "stance": main.decision.stance,
-        "decision": main.decision.model_dump(), "sources": main.sources[:20],
-        "snapshot": snapshot, "usage": main.usage,
-        "estimated_cost_usd": round(sum(a.usage.get("estimated_cost_usd", 0) for a in answers), 3),
-    }
+    record = build_record(snapshot, [a.decision for a in answers], previous_pct, g, main.model, effort,
+                          main.sources, main.usage,
+                          round(sum(a.usage.get("estimated_cost_usd", 0) for a in answers), 3))
     if write:
         append_journal(journal_path, record)
+    return record
+
+
+# ---------------------------------------------------------------- 由 Claude Code 定时任务决策（不走 API）
+
+ROUTINE_MODEL = "claude-code-routine"
+SNAPSHOT_MAX_AGE_DAYS = 2
+
+
+def routine_prompt(snapshot: dict, history: list[dict], previous_pct: float | None) -> str:
+    """给定时任务读的完整说明：同一份系统提示词、用户提示词和输出结构。"""
+    return "\n\n".join([
+        "## 角色与规则（与 API 版本相同）", SYSTEM_PROMPT,
+        "## 本次输入", build_user_prompt(snapshot, history, previous_pct),
+        "## 输出", "把最终决定写成一个 JSON 文件，严格符合下面的结构（不要多余字段）：",
+        "```json\n" + json.dumps(DECISION_SCHEMA, ensure_ascii=False, indent=2) + "\n```",
+    ])
+
+
+def record_from_answer(
+    answer: dict, snapshot: dict, journal_path: str | Path, guardrails: Guardrails | None = None,
+    sources: list[dict] | None = None, model: str = ROUTINE_MODEL, now: datetime | None = None,
+    force: bool = False,
+) -> dict:
+    """校验定时任务给出的 JSON，套用护栏，写入日志。同一个收盘日只记录一次。"""
+    now = now or datetime.now(timezone.utc)
+    decision = Decision.model_validate(answer)
+    age = (now.date() - pd.Timestamp(snapshot["as_of_close_utc"]).date()).days
+    if age > SNAPSHOT_MAX_AGE_DAYS:
+        raise ValueError(f"行情快照基于 {snapshot['as_of_close_utc']}，已过去 {age} 天，请先更新快照")
+    history = read_journal(journal_path)
+    if not force and any(r["as_of_close_utc"] == snapshot["as_of_close_utc"] for r in history):
+        raise ValueError(f"{snapshot['as_of_close_utc']} 的决定已经记录过了")
+    previous_pct = history[-1]["final_pct"] if history else None
+    record = build_record(snapshot, [decision], previous_pct, guardrails or Guardrails(), model,
+                          sources=sources, now=now)
+    append_journal(journal_path, record)
     return record
 
 
@@ -433,7 +481,9 @@ def format_decision(rec: dict, order: dict | None = None) -> str:
         "改变决定的条件:", *[f"  - {t}" for t in d["change_triggers"]],
         f"建议 {d['review_in_days']} 天后重新评估",
     ]
-    if rec.get("estimated_cost_usd") is not None:
+    if rec.get("model") == ROUTINE_MODEL:
+        lines.append("本次由 Claude Code 定时任务决策（使用订阅额度，无 API 费用）")
+    elif rec.get("estimated_cost_usd") is not None:
         u = rec.get("usage", {})
         lines.append(f"本次估算费用: ${rec['estimated_cost_usd']:.2f}（输入 {u.get('input_tokens', 0):,} / 缓存读取 "
                      f"{u.get('cache_read_input_tokens', 0):,} / 缓存写入 {u.get('cache_creation_input_tokens', 0):,} / "

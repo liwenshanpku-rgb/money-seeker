@@ -110,11 +110,11 @@ python -m money_seeker ai-review --plot ai_review.png
 | 步骤 | 谁来做 | 时间 |
 |---|---|---|
 | 行情快照：日线、均线、波动、Hyperliquid 资金费率与持仓量、美债利率 → `ai_journal/snapshot.json` | GitHub Actions（`signal-daily.yml`，不需要密钥） | 每天 00:45 UTC |
-| 联网研究六类信息、给出目标仓位（同一份系统提示词和输出结构） | Claude Code 定时任务 | 每周一 01:10 UTC（北京时间 09:10） |
+| 联网研究六类信息、给出目标仓位（同一份系统提示词和输出结构） | Claude Code 定时任务，唤醒有仓库推送权限的那个 Claude Code 会话执行 | 每周一 01:13 UTC（北京时间 09:13） |
 | 校验 JSON、套用护栏、写入 `decisions.jsonl` 和 `latest.md` | 定时任务运行 `python -m money_seeker ai-record` | 同上 |
 | 重新发布当天的信号文件（带上新决定） | GitHub Actions（`signal-daily.yml` 周一第二次运行） | 每周一 02:17 UTC |
 | 模拟盘评估 `review.txt` / `review.png` | GitHub Actions（`signal-daily.yml`） | 每天 |
-| 手机推送本周汇总 | 定时任务的最终回复 | 同上 |
+| 手机推送本周汇总 | 另一个只读的 Claude Code 定时任务 | 每周一 02:25 UTC（北京时间 10:25） |
 
 相关命令：
 

@@ -1,0 +1,33 @@
+{
+  "as_of_close_utc": "2026-10-21",
+  "btc_close_usd": 84093.42,
+  "returns": {
+    "7d": 0.0295,
+    "30d": -0.0292,
+    "90d": 0.2918,
+    "365d": -0.2235
+  },
+  "sma50": 81742.66,
+  "sma200": 72773.95,
+  "pct_vs_sma200": 0.1555,
+  "realized_vol_30d_annualized": 0.2322,
+  "drawdown_from_all_time_high": -0.3254,
+  "all_time_high_in_data": 124658.54,
+  "trend_rule_mode": "UP",
+  "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 上涨模式",
+  "perp_funding": {
+    "source": "hyperliquid",
+    "avg_1d_annualized": 0.0832,
+    "avg_7d_annualized": 0.091,
+    "avg_30d_annualized": 0.0821,
+    "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
+  },
+  "perp_open_interest": {
+    "source": "hyperliquid",
+    "open_interest_btc": 43166.62,
+    "open_interest_usd": 3508064876,
+    "mark_price": 81268.0,
+    "volume_24h_usd": 3562546253
+  },
+  "us_3m_tbill": 0.0407
+}

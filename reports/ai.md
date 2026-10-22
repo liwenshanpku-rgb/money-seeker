@@ -103,36 +103,37 @@ python -m money_seeker ai-review --plot ai_review.png
 参考来源: ...
 ```
 
-## 每周一自动运行（GitHub Actions）
+## 每周一自动运行（Claude Code 定时任务，使用订阅额度）
 
-工作流文件：`.github/workflows/ai-weekly.yml`。
+从 2026-10 起，每周的决策不再调用 Claude API，而是由 Claude Code 定时任务（Routine）完成，使用 Claude 订阅的额度，没有按 token 计费。分工：
 
-**运行时间与方式**：
-- 每周一 00:30 UTC（北京时间 08:30）运行，也可以在 Actions 页面手动运行；
-- 只记录决定，不下单；
-- 第一次运行时假设起始仓位为 100%（工作流里的 `START_PCT`），护栏以此为基准。
+| 步骤 | 谁来做 | 时间 |
+|---|---|---|
+| 行情快照：日线、均线、波动、Hyperliquid 资金费率与持仓量、美债利率 → `ai_journal/snapshot.json` | GitHub Actions（`signal-daily.yml`，不需要密钥） | 每天 00:45 UTC |
+| 联网研究六类信息、给出目标仓位（同一份系统提示词和输出结构） | Claude Code 定时任务 | 每周一 01:10 UTC（北京时间 09:10） |
+| 校验 JSON、套用护栏、写入 `decisions.jsonl` 和 `latest.md` | 定时任务运行 `python -m money_seeker ai-record` | 同上 |
+| 重新发布当天的信号文件（带上新决定） | 定时任务触发 `signal-daily.yml` | 同上 |
+| 模拟盘评估 `review.txt` / `review.png` | GitHub Actions（`signal-daily.yml`） | 每天 |
+| 手机推送本周汇总 | 定时任务的最终回复 | 同上 |
 
-**每次运行做的事**：
-1. 从 Binance 公开行情接口取日线，从 Hyperliquid 取资金费率和持仓量，从 FRED 取美债利率。Binance 的合约接口不对美国服务器开放，所以衍生品数据改用 Hyperliquid；
-2. 运行 `python -m money_seeker ai`，再运行 `ai-review`；
-3. 把 `decisions.jsonl`（全部决定）、`latest.md`（本次决定）、`review.txt` / `review.png`（模拟盘对比）提交到 **`ai-journal` 分支**；
-4. 本次决定和模拟盘结果也会显示在 Actions 运行页面的 Summary 里。
+相关命令：
 
-**需要你做的两件事**：
-1. **把代码合并到 `main`**：GitHub 只运行默认分支上的定时工作流，目前代码在 `claude/beautiful-tesla-fovtcf` 分支上；
-2. **添加 API key**：仓库 Settings → Secrets and variables → Actions → New repository secret，名称 `ANTHROPIC_API_KEY`。
+```bash
+python -m money_seeker ai-snapshot --out ai_journal/snapshot.json     # 只生成快照
+python -m money_seeker ai-prompt                                       # 打印给定时任务的完整说明
+python -m money_seeker ai-record --answer answer.json --latest ai_journal/latest.md
+```
 
-配置好之后，可以先在 Actions → “AI weekly position advisor” → Run workflow 手动跑一次，确认流程正常。
+`ai-record` 会拒绝过期的快照（超过 2 天）和同一收盘日的重复记录，模型输出不符合结构（例如仓位超出 0–150）时也不会写入。
+
+和 API 版本的区别：
+- 规则、提示词、输出结构和护栏完全相同；
+- 研究用的是 Claude Code 的网络搜索和网页抓取。部分网站可能被定时任务所在环境的网络策略挡住，这时按规则在 evidence 里写“未能获取”，不会因此调仓；
+- 日志里 `model` 字段为 `claude-code-routine`，`estimated_cost_usd` 为空。
+
+**备用**：`.github/workflows/ai-weekly.yml` 仍然可以在 Actions 页面手动运行（使用 `ANTHROPIC_API_KEY`，按次计费，约 $0.3–0.6），不再定时运行。
 
 **注意**：仓库是公开的，`ai-journal` 分支上的决定和理由任何人都能看到。日志里没有你的持仓数量。
-
-**费用**：
-- 第一次试运行（8 次搜索、不抓网页）：约 $0.3，但没查到有用信息。
-- 第二次（15 次搜索 + 8 次网页抓取、不开缓存）：输入约 29 万 token，约 **$1.4**。原因是服务端工具循环每一步都会重新读一遍越来越长的上下文，而且抓到了 SEC 季度报告这类大文档。
-- 现在的设置：开启提示缓存（重复读取的部分按 1/20 计费，搜索结果之后服务端会自动写缓存），每个网页最多读入 6000 token，屏蔽 sec.gov，最多 12 次搜索、6 次抓取。预计每次 $0.3–0.6，每月约 $1.5–2.5。
-
-每次运行的估算费用会打印在结果里，并记在日志的 `estimated_cost_usd` 字段。
-以实际账单为准，每次的 token 用量都记在日志里。
 
 ## 需要清楚的风险
 

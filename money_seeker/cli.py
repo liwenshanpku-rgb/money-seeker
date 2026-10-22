@@ -679,7 +679,8 @@ def _load_close_for_ai(args: argparse.Namespace) -> pd.Series:
         raise SystemExit(f"{err}\n无法访问 Binance：请用 --csv 指定本地日线文件。")
 
 
-def _cmd_ai(args: argparse.Namespace) -> None:
+def _ai_market_inputs(args: argparse.Namespace):
+    """日线、资金费率、持仓量和美债利率；衍生品和利率只是参考，拿不到就跳过。"""
     from . import ai_advisor as A
 
     close = _load_close_for_ai(args)
@@ -698,6 +699,13 @@ def _cmd_ai(args: argparse.Namespace) -> None:
         tbill = A.fetch_tbill()
     except Exception as err:  # noqa: BLE001
         print(f"（美债利率获取失败，跳过：{err}）")
+    return close, funding, tbill, oi, source
+
+
+def _cmd_ai(args: argparse.Namespace) -> None:
+    from . import ai_advisor as A
+
+    close, funding, tbill, oi, source = _ai_market_inputs(args)
 
     if args.from_kraken:
         h = _kraken_holdings()
@@ -736,6 +744,44 @@ def _cmd_ai(args: argparse.Namespace) -> None:
     order = (A.orders(rec["final_pct"], float(close.iloc[-1]), args.btc, args.cash, args.debt)
              if args.btc is not None else None)
     print(A.format_decision(rec, order))
+    print(f"已写入日志: {Path(args.journal).resolve()}")
+
+
+def _cmd_ai_snapshot(args: argparse.Namespace) -> None:
+    from . import ai_advisor as A
+
+    close, funding, tbill, oi, source = _ai_market_inputs(args)
+    snap = A.market_snapshot(close, funding, tbill, funding_source=source, open_interest=oi)
+    text = json.dumps(snap, ensure_ascii=False, indent=2)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text + "\n")
+    print(text)
+
+
+def _cmd_ai_prompt(args: argparse.Namespace) -> None:
+    from . import ai_advisor as A
+
+    snap = json.loads(Path(args.snapshot).read_text())
+    history = A.read_journal(args.journal)
+    print(A.routine_prompt(snap, history, history[-1]["final_pct"] if history else None))
+
+
+def _cmd_ai_record(args: argparse.Namespace) -> None:
+    from pydantic import ValidationError
+
+    from . import ai_advisor as A
+
+    snap = json.loads(Path(args.snapshot).read_text())
+    answer = json.loads(Path(args.answer).read_text())
+    sources = json.loads(Path(args.sources).read_text()) if args.sources else None
+    try:
+        rec = A.record_from_answer(answer, snap, args.journal, sources=sources, force=args.force)
+    except (ValueError, ValidationError) as err:
+        raise SystemExit(f"没有写入日志：{err}")
+    text = A.format_decision(rec)
+    print(text)
+    if args.latest:
+        Path(args.latest).write_text(text + "\n")
     print(f"已写入日志: {Path(args.journal).resolve()}")
 
 
@@ -1023,6 +1069,25 @@ def build_parser() -> argparse.ArgumentParser:
     ar.add_argument("--borrow-rate", type=float, default=0.08, help="仓位超过 100% 时的借款年利率")
     ar.add_argument("--plot", help="保存净值对比图的路径")
     ar.set_defaults(func=_cmd_ai_review)
+
+    sn = sub.add_parser("ai-snapshot", help="只生成 AI 顾问用的行情快照（JSON），不调用 Claude")
+    sn.add_argument("--csv", help="改用本地日线 CSV（默认 Binance）")
+    sn.add_argument("--out", default="ai_journal/snapshot.json")
+    sn.set_defaults(func=_cmd_ai_snapshot)
+
+    ap = sub.add_parser("ai-prompt", help="打印给 Claude Code 定时任务的完整说明（规则、本次输入、输出结构）")
+    ap.add_argument("--snapshot", default="ai_journal/snapshot.json")
+    ap.add_argument("--journal", default="ai_journal/decisions.jsonl")
+    ap.set_defaults(func=_cmd_ai_prompt)
+
+    rc = sub.add_parser("ai-record", help="校验定时任务给出的决定 JSON，套用护栏后写入日志")
+    rc.add_argument("--answer", required=True, help="模型输出的决定 JSON 文件")
+    rc.add_argument("--snapshot", default="ai_journal/snapshot.json")
+    rc.add_argument("--journal", default="ai_journal/decisions.jsonl")
+    rc.add_argument("--latest", help="同时把格式化结果写到这个文件（例如 ai_journal/latest.md）")
+    rc.add_argument("--sources", help="参考来源 JSON 文件：[{\"title\": ..., \"url\": ...}]")
+    rc.add_argument("--force", action="store_true", help="同一收盘日已有记录时仍然写入")
+    rc.set_defaults(func=_cmd_ai_record)
 
     kr = sub.add_parser("kraken", help="Kraken 只读同步：显示 BTC、美元及稳定币余额和当前 BTC 仓位")
     kr.add_argument("--debt", type=float, default=0.0, help="Kraken 之外的借款（USD），用于计算仓位")

@@ -1,13 +1,12 @@
-# 每周一自动运行 AI 仓位顾问（模拟盘，只记录决定，不下单）。
+# 备用：用 Claude API 运行 AI 仓位顾问（模拟盘，只记录决定，不下单），按次计费。
+# 日常的每周决策已改由 Claude Code 定时任务完成（使用订阅额度，见 reports/ai.md），这里只保留手动运行。
 # 决策日志提交到 ai-journal 分支：ai_journal/decisions.jsonl、latest.md、review.txt、review.png。
 # 需要在仓库 Settings → Secrets and variables → Actions 中添加 ANTHROPIC_API_KEY。
 # GitHub 只运行默认分支（main）上的定时 workflow。
 name: AI weekly position advisor
 
 on:
-  schedule:
-    - cron: "30 0 * * 1"   # 每周一 00:30 UTC（北京时间 08:30，日线收盘后半小时）
-  workflow_dispatch:         # 也可以在 Actions 页面手动运行
+  workflow_dispatch:         # 只在 Actions 页面手动运行
 
 permissions:
   contents: write

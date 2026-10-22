@@ -22,6 +22,8 @@ money_seeker/
   kraken.py     # Kraken 只读同步：余额、当前 BTC 仓位、公开日线
   brief.py      # 本地每日简报：方案 B + AI 决定 + 真实持仓，Bark 推送，信号文件
   publish.py    # 公开信号文件（不含持仓）：方案 B / C 目标仓位 + AI 最新决定
+  hourly.py     # BTC 小时线下载（Coinbase / Bitstamp）
+  intraday.py   # 小时线动量（日内 / 超短线）回测
   notify.py     # Bark 推送
   metrics.py    # 夏普比率、最大回撤、年化收益/波动
   plot.py       # 收益曲线图（matplotlib）

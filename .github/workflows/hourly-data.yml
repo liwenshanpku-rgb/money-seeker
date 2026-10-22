@@ -1,0 +1,50 @@
+# 研究用：下载 BTC 小时线（Coinbase / Bitstamp 公开接口），压缩后提交到 data-cache 分支。
+# 云端开发环境访问不了交易所接口，所以放在 GitHub Actions 里下载。
+name: Hourly data cache
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/beautiful-tesla-fovtcf]
+    paths: [money_seeker/hourly.py, .github/workflows/hourly-data.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Download
+        run: |
+          mkdir -p out
+          python - <<'PY'
+          from money_seeker import hourly
+          df = hourly.fetch("2016-01-01")
+          print(df.index[0], df.index[-1], len(df))
+          gaps = df.index.to_series().diff().dt.total_seconds().div(3600).gt(1).sum()
+          print("gaps:", gaps)
+          df.to_csv("out/btc_usd_1h.csv.gz")
+          PY
+      - name: Commit to data-cache
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin data-cache >/dev/null; then
+            git fetch origin data-cache
+            git worktree add -B data-cache cache origin/data-cache
+          else
+            git worktree add --detach cache
+            cd cache && git checkout --orphan data-cache && git rm -rf --quiet . && cd ..
+          fi
+          cp out/btc_usd_1h.csv.gz cache/
+          cd cache
+          git add btc_usd_1h.csv.gz
+          git commit -m "BTC hourly data $(date -u +%F)"
+          git push origin data-cache

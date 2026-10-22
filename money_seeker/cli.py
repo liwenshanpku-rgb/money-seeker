@@ -11,8 +11,14 @@ import pandas as pd
 
 from . import data
 from .metrics import summarize
-from .plot import plot_equity
 from .strategy import GridConfig, buy_and_hold, run_grid_backtest
+
+
+def plot_equity(*args, **kwargs):
+    """画图时才加载 matplotlib，不画图的命令（例如定时任务里的 ai-record）不受图形库环境影响。"""
+    from .plot import plot_equity as plot
+
+    return plot(*args, **kwargs)
 
 
 def _cmd_fetch(args: argparse.Namespace) -> None:

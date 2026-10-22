@@ -839,6 +839,31 @@ def _cmd_signal(args: argparse.Namespace) -> None:
             f.write(json.dumps(sig, ensure_ascii=False) + "\n")
 
 
+def _cmd_intraday(args: argparse.Namespace) -> None:
+    from . import hourly, intraday
+
+    if args.csv:
+        df = pd.read_csv(args.csv, index_col=0, parse_dates=True)
+    else:
+        df = hourly.fetch(args.start)
+        Path(args.data_dir).mkdir(parents=True, exist_ok=True)
+        df.to_csv(Path(args.data_dir) / "btc_usd_1h.csv.gz")
+    close = df["close"].asfreq("h").ffill()
+    print("买入持有:", {k: {m: round(v, 3) for m, v in d.items()} for k, d in intraday.buy_hold(close).items()})
+    tables = []
+    for cost in intraday.COSTS:
+        t = intraday.evaluate(close, intraday.grid(), cost).assign(cost=cost)
+        best = t.sort_values("is_sharpe", ascending=False).iloc[0]
+        print(f"单边成本 {cost:.2%}：样本内最优 {best['strategy']}，样本外年化 {best['oos_annual_return']:.1%}，"
+              f"夏普 {best['oos_sharpe']:.2f}；样本外跑赢买入持有的组合占比 "
+              f"{(t['oos_annual_return'] > intraday.buy_hold(close)['oos']['annual_return']).mean():.0%}")
+        tables.append(t)
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    pd.concat(tables).to_csv(out / "intraday_grid.csv", index=False, float_format="%.4f")
+    print(f"完整结果: {out / 'intraday_grid.csv'}")
+
+
 def _last_journal_entry(path: str) -> dict | None:
     import json
 
@@ -1023,6 +1048,13 @@ def build_parser() -> argparse.ArgumentParser:
     sg.add_argument("--csv", help="改用本地日线 CSV（默认 Kraken 公开日线）")
     sg.add_argument("--max-close-age", type=int, default=1, help="最新收盘距今超过多少天就拒绝发布，默认 1")
     sg.set_defaults(func=_cmd_signal)
+
+    it = sub.add_parser("intraday", help="小时线动量（日内 / 超短线）：样本内选参、样本外检验、手续费敏感性")
+    it.add_argument("--csv", help="已下载的小时线 CSV（默认从 Coinbase 下载）")
+    it.add_argument("--start", default="2016-01-01")
+    it.add_argument("--data-dir", default="data")
+    it.add_argument("--out-dir", default="reports")
+    it.set_defaults(func=_cmd_intraday)
     return p
 
 

@@ -13,7 +13,9 @@
   - 两种视角都有：节奏（上杆和下杆用时之比，职业约 3 : 1）。
 
   每项都给出职业区间、问题诊断、改进要领和具体练习，并自动列出最需要改进的 3 点。
-- **AI 教练点评（可选，用 Claude 订阅额度）**：网页把 10 张关键帧和测量数据推到仓库的 `swing-coach` 分支，GitHub Actions 里的 Claude Code 生成总体评价、逐位置点评、优先改进点和两周练习计划，再写回分支，网页自动取回显示。不走 API 计费。
+- **AI 教练点评（可选，都不走 API 计费）**，生成总体评价、逐位置点评、优先改进点和两周练习计划：
+  - **方式一：发给 Claude App**（免费，无需设置）：网页生成一张 P1–P10 拼图和一段点评请求文字，通过手机分享面板发到 Claude App，粘贴后发送。用的是 Claude App 里正常聊天的额度。
+  - **方式二：自动点评**：网页把关键帧和测量数据推到仓库的 `swing-coach` 分支，由 GitHub Actions 里的 Claude Code（订阅额度）写出点评，网页自动取回显示。需要配置两个 token。
 
 ## 部署与使用
 
@@ -25,7 +27,9 @@
 
 手机浏览器打开这个地址即可上传视频分析。姿态识别和全部规则分析都在手机浏览器里完成，视频不会上传。
 
-### 2. 开启 AI 点评（可选，只需一次）
+### 2. 开启自动点评（方式二，可选，只需一次）
+
+方式一「发给 Claude App」不需要任何设置。下面只针对方式二。
 
 1. 在装了 Claude Code 的电脑上运行 `claude setup-token`，把生成的 token 添加到仓库 **Settings → Secrets and variables → Actions**，名称为 `CLAUDE_CODE_OAUTH_TOKEN`。这样使用的是你 Claude 订阅里的额度。
 2. 在 GitHub **Settings → Developer settings → Fine-grained tokens** 新建一个 token：只选这个仓库，权限 **Contents** 选 **Read and write**。在网页的「GitHub 设置」里填入。这个 token 只保存在该设备的浏览器里。
@@ -58,7 +62,9 @@ web/js/metrics.js    检查项定义、职业区间、诊断与练习、评分
 web/js/pose.js       MediaPipe 逐帧提取
 web/js/render.js     关键帧、模板叠加、手部轨迹、时间轴
 web/js/app.js        页面逻辑
-web/js/github.js     推送 AI 点评请求、取回结果
+web/js/share.js      方式一：拼图、点评请求文字、分享
+web/js/github.js     方式二：推送 AI 点评请求、取回结果
+web/coach-prompt.md  教练提示词（两种方式共用）
 coach_task.py        Actions 中把请求整理成 Claude Code 任务
 tests/               node --test 单元测试（用合成挥杆验证相位检测和指标）
 ```

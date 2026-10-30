@@ -9,6 +9,7 @@ import {
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
 import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
+import { PROS, embedURL } from './pros.js';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
@@ -17,8 +18,8 @@ const CLUB_TEXT = { iron: '铁杆', driver: '一号木' };
 const VIEWS = ['fo', 'dtl'];
 const VIEW_SHORT = { fo: '正面', dtl: '侧面' };
 
-// views：每个拍摄角度一份分析结果；pro：可选的职业视频（只和同角度的结果对比）；active：校正面板当前选中的角度
-const state = { views: { fo: null, dtl: null }, pro: null, active: null, proURL: null };
+// views：每个拍摄角度一份分析结果；active：校正面板当前选中的角度
+const state = { views: { fo: null, dtl: null }, active: null };
 const slots = Object.fromEntries(VIEWS.map((v) => [v, { url: null, video: $(`video-${v}`) }]));
 
 // 手机上逐帧识别较慢，默认 30fps
@@ -95,34 +96,12 @@ function updateAnalyzeButton() {
 $('newAnalysis').addEventListener('click', () => {
   VIEWS.forEach(clearSlot);
   state.views = { fo: null, dtl: null };
-  state.pro = null;
   $('results').hidden = true;
   $('coach').disabled = true;
   $('prepareShare').disabled = true;
   $('coachOut').innerHTML = '';
   hideError();
   window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
-$('proFile').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  if (state.proURL) URL.revokeObjectURL(state.proURL);
-  state.proURL = URL.createObjectURL(file);
-  const v = $('proVideo');
-  v.src = state.proURL;
-  v.load();
-  const primed = primeVideo(v);
-  await new Promise((r) => { if (v.readyState >= 1) r(); else v.onloadedmetadata = r; });
-  await primed;
-  $('proStatus').textContent = `已选择：${file.name}，分析时会一并处理`;
-  if (analyses().length && !analyses()[0].demo) {
-    try {
-      state.pro = await analyzeVideo(v, { ...settings(), start: 0, end: Math.min(videoDuration(v), 15) }, '职业视频：');
-      await renderAll();
-    } catch (err) { showError(`职业视频分析失败：${err.message}`); }
-  }
 });
 
 // ---------- 分析流程 ----------
@@ -172,7 +151,7 @@ async function analyzeVideo(video, s, label = '') {
 $('analyze').addEventListener('click', async () => {
   // 必须在点击事件里同步调用（iPhone 要求播放由用户手势触发）
   const todo = VIEWS.filter(hasVideo);
-  const primed = [...todo.map((v) => primeVideo(slots[v].video)), $('proVideo').src ? primeVideo($('proVideo')) : null];
+  const primed = todo.map((v) => primeVideo(slots[v].video));
   hideError();
   $('analyze').disabled = true;
   try {
@@ -186,11 +165,6 @@ $('analyze').addEventListener('click', async () => {
       views[v] = await analyzeVideo(video, { ...s, view: v, start, end }, todo.length > 1 ? `${VIEW_SHORT[v]}：` : '');
     }
     state.views = views;
-    state.pro = null;
-    if ($('proVideo').src) {
-      const pv = $('proVideo');
-      state.pro = await analyzeVideo(pv, { ...s, start: 0, end: Math.min(videoDuration(pv), 15) }, '职业视频：');
-    }
     setProgress(1, '完成');
     await renderAll();
   } catch (err) {
@@ -220,7 +194,6 @@ $('demo').addEventListener('click', async () => {
     views[v] = analyzeFrames(frames, { ...s, view: v }, { aspect: 16 / 9, source: blankSource(), demo: true });
   }
   state.views = views;
-  state.pro = null;
   await renderAll();
 });
 
@@ -237,12 +210,12 @@ async function renderAll() {
     a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm).concat(
       POSITIONS.map((p) => alignTemplate(p, a.ref, opts(a)).landmarks)), a.aspect);
   }
-  if (state.pro) state.pro.crop = cropBox(POSITIONS.map((p) => state.pro.frames[state.pro.P[p]].lm), state.pro.aspect);
   const warnings = list.map((a) => a.viewWarning).filter(Boolean);
   if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
   if (warnings.length) showError(warnings.join(' '));
   renderSummary();
   renderPriorities();
+  renderPros();
   renderTable();
   setupScrub();
   await renderPositions();
@@ -285,7 +258,7 @@ function renderSummary() {
       return [`上杆 / 下杆用时${multi() ? `（${VIEW_SHORT[a.view]}）` : ''}`, `${(t('P4') - t('P1')).toFixed(2)}s / ${(t('P7') - t('P4')).toFixed(2)}s`];
     }),
     ...(first.demo ? [['数据来源', '示例合成挥杆']] : []),
-    ...(state.pro ? [['对比模板', `职业模板 + 职业视频（${VIEW_SHORT[state.pro.view]}）`]] : [['对比模板', '内置职业模板']]),
+    ['对比模板', '内置职业模板'],
   ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
   $('counts').innerHTML = ['good', 'warn', 'bad', 'na']
     .map((s) => `<div><span class="chip ${s}">${STATUS_TEXT[s]}</span> ${counts[s]} 项</div>`).join('');
@@ -315,16 +288,10 @@ function fmtRange(r) {
   return `${lo} – ${hi} ${m.unit}`;
 }
 
-function proValue(r) {
-  if (!state.pro || state.pro.view !== r.view) return null;
-  const p = state.pro.results.find((x) => x.id === r.id);
-  return p ? formatValue(p.metric, p.value) : null;
-}
 
 function renderTable() {
   const onlyIssues = $('onlyIssues').checked;
   const rows = combined().results.filter((r) => !onlyIssues || r.status === 'warn' || r.status === 'bad');
-  const hasPro = !!state.pro;
   const note = (r) => (r.advice
     ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
@@ -332,14 +299,13 @@ function renderTable() {
     : `<details><summary>说明</summary>${r.metric.about}</details>`);
   // 手机上每一行显示为一张小卡片（见 style.css），各单元格用 class 定位
   $('metricsTable').innerHTML = `
-    <thead><tr>${multi() ? '<th>视角</th>' : ''}<th>位置</th><th>检查项</th><th>你的数值</th>${hasPro ? '<th>职业视频</th>' : ''}<th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
+    <thead><tr>${multi() ? '<th>视角</th>' : ''}<th>位置</th><th>检查项</th><th>你的数值</th><th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
     <tbody>${rows.length ? rows.map((r) => `
       <tr class="row-${r.status}">
         ${multi() ? `<td class="c-view">${VIEW_SHORT[r.view]}</td>` : ''}
         <td class="c-pos">${multi() ? `<span class="tag m-only">${VIEW_SHORT[r.view]}</span>` : ''}${r.pos}</td>
         <td class="c-name">${r.metric.name}</td>
         <td class="num c-val"><span class="lbl">你的数值 </span>${formatValue(r.metric, r.value)}</td>
-        ${hasPro ? `<td class="num c-pro"><span class="lbl">职业视频 </span>${proValue(r) ?? '—'}</td>` : ''}
         <td class="num c-range"><span class="lbl">职业区间 </span>${fmtRange(r)}</td>
         <td class="c-status"><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
         <td class="advice c-advice">${note(r)}</td>
@@ -353,12 +319,8 @@ async function renderPositions() {
   const box = $('positions');
   const byPos = combined().summary.byPos;
   box.innerHTML = '';
-  // 每张卡片：各角度的画面（+ 同角度的职业视频）
-  const panes = [];
-  for (const a of list) {
-    panes.push({ a, pro: false });
-    if (state.pro && state.pro.view === a.view) panes.push({ a: state.pro, pro: true });
-  }
+  // 每张卡片：各角度的画面
+  const panes = list.map((a) => ({ a }));
   box.classList.toggle('multi', panes.length > 1);
   for (const pos of POSITIONS) {
     const card = document.createElement('div');
@@ -375,11 +337,10 @@ async function renderPositions() {
     box.appendChild(card);
     const canvases = card.querySelectorAll('canvas');
     for (let i = 0; i < panes.length; i++) {
-      const { a, pro } = panes[i];
-      const who = pro ? '职业' : multi() || state.pro ? `你${multi() ? '·' + VIEW_SHORT[a.view] : ''}` : '';
+      const { a } = panes[i];
       await drawFrame(canvases[i], a.source, a.frames[a.P[pos]], a.crop, {
-        template: pro ? null : alignTemplate(pos, a.ref, opts(a)), showTemplate: show,
-        label: who ? `${who} · ${pos}` : pos,
+        template: alignTemplate(pos, a.ref, opts(a)), showTemplate: show,
+        label: multi() ? `${VIEW_SHORT[a.view]} · ${pos}` : pos,
       });
     }
     card.dataset.pos = pos;
@@ -387,6 +348,26 @@ async function renderPositions() {
 }
 
 $('showTemplate').addEventListener('change', () => analyses().length && renderPositions());
+
+// ---------- 对比职业球员（嵌入 YouTube 视频） ----------
+const KEY_PRO = 'swingCoach.pro';
+$('proSelect').innerHTML = PROS.map((p) => `<option value="${p.id}">${p.name}（${p.tour}）</option>`).join('');
+$('proSelect').value = PROS.some((p) => p.id === store.get(KEY_PRO)) ? store.get(KEY_PRO) : PROS[0].id;
+$('proSelect').addEventListener('change', () => { store.set(KEY_PRO, $('proSelect').value); renderPros(); });
+
+// 和你上传的角度相同的视频排在前面
+function renderPros() {
+  const pro = PROS.find((p) => p.id === $('proSelect').value) || PROS[0];
+  const mine = analyses().map((a) => a.view);
+  const order = [...VIEWS].sort((x, y) => mine.includes(y) - mine.includes(x));
+  $('proNote').textContent = pro.note;
+  $('proVideos').innerHTML = order.filter((v) => pro[v]).map((v) => `
+    <div class="pro-video">
+      <b>${pro.name} · ${VIEW_SHORT[v]}${mine.includes(v) ? '<span class="tag">对应你的视频</span>' : ''}</b>
+      <div class="frame"><iframe src="${embedURL(pro[v])}" title="${pro.name} ${VIEW_SHORT[v]}挥杆" loading="lazy"
+        allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+    </div>`).join('');
+}
 
 // ---------- 手动校正 ----------
 const activeA = () => state.views[state.active] || analyses()[0];
@@ -499,7 +480,7 @@ function coachData(withVideo) {
     timing: list.length === 1 ? timing(first) : Object.fromEntries(list.map((a) => [VIEW_SHORT[a.view], timing(a)])),
     metrics: results.map((r) => ({
       view: VIEW_SHORT[r.view], pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
-      status: r.status, issue: r.advice?.issue ?? null, pro_value: proValue(r),
+      status: r.status, issue: r.advice?.issue ?? null,
     })),
   };
 }

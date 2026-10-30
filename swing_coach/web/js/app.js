@@ -322,25 +322,30 @@ function proValue(r) {
 }
 
 function renderTable() {
-  const rows = combined().results;
+  const onlyIssues = $('onlyIssues').checked;
+  const rows = combined().results.filter((r) => !onlyIssues || r.status === 'warn' || r.status === 'bad');
   const hasPro = !!state.pro;
+  const note = (r) => (r.advice
+    ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
+    : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
+    : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'
+    : `<details><summary>说明</summary>${r.metric.about}</details>`);
+  // 手机上每一行显示为一张小卡片（见 style.css），各单元格用 class 定位
   $('metricsTable').innerHTML = `
     <thead><tr>${multi() ? '<th>视角</th>' : ''}<th>位置</th><th>检查项</th><th>你的数值</th>${hasPro ? '<th>职业视频</th>' : ''}<th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
-    <tbody>${rows.map((r) => `
-      <tr>
-        ${multi() ? `<td>${VIEW_SHORT[r.view]}</td>` : ''}
-        <td>${r.pos}</td>
-        <td>${r.metric.name}</td>
-        <td class="num">${formatValue(r.metric, r.value)}</td>
-        ${hasPro ? `<td class="num">${proValue(r) ?? '—'}</td>` : ''}
-        <td class="num">${fmtRange(r)}</td>
-        <td><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
-        <td class="advice">${r.advice
-          ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
-          : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
-          : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。' : r.metric.about}</td>
-      </tr>`).join('')}</tbody>`;
+    <tbody>${rows.length ? rows.map((r) => `
+      <tr class="row-${r.status}">
+        ${multi() ? `<td class="c-view">${VIEW_SHORT[r.view]}</td>` : ''}
+        <td class="c-pos">${multi() ? `<span class="tag m-only">${VIEW_SHORT[r.view]}</span>` : ''}${r.pos}</td>
+        <td class="c-name">${r.metric.name}</td>
+        <td class="num c-val"><span class="lbl">你的数值 </span>${formatValue(r.metric, r.value)}</td>
+        ${hasPro ? `<td class="num c-pro"><span class="lbl">职业视频 </span>${proValue(r) ?? '—'}</td>` : ''}
+        <td class="num c-range"><span class="lbl">职业区间 </span>${fmtRange(r)}</td>
+        <td class="c-status"><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
+        <td class="advice c-advice">${note(r)}</td>
+      </tr>`).join('') : '<tr><td colspan="8" class="muted">没有需要改进的项 👍</td></tr>'}</tbody>`;
 }
+$('onlyIssues').addEventListener('change', () => analyses().length && renderTable());
 
 async function renderPositions() {
   const list = analyses();

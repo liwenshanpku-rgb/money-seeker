@@ -192,14 +192,28 @@ export function drawTimeline(canvas, speed, frames, P, current) {
   ctx.textAlign = 'left';
 }
 
-// 背景来源：真实视频
-export function videoSource(video) {
+// 背景来源：识别时存下来的逐帧画面（按时间取最近的一帧），不再事后跳转视频
+export function frameSource(frames) {
+  const bitmaps = new Map();
+  const nearest = (t) => {
+    let best = null, bd = Infinity;
+    for (const f of frames) { if (!f.img) continue; const d = Math.abs(f.t - t); if (d < bd) { bd = d; best = f; } }
+    return best;
+  };
+  const load = async (f) => {
+    if (!bitmaps.has(f)) {
+      if (bitmaps.size > 40) bitmaps.delete(bitmaps.keys().next().value);
+      bitmaps.set(f, createImageBitmap(f.img));
+    }
+    return bitmaps.get(f);
+  };
   return {
     async draw(ctx, t, crop, { ox, oy, k }) {
-      const { seek } = await import('./pose.js');
-      if (Math.abs(video.currentTime - t) > 1e-3) await seek(video, t);
-      const vh = video.videoHeight;
-      ctx.drawImage(video, crop.x * vh, crop.y * vh, crop.w * vh, crop.h * vh, ox, oy, crop.w * k, crop.h * k);
+      const f = nearest(t);
+      if (!f) return;
+      const bmp = await load(f);
+      const vh = bmp.height;
+      ctx.drawImage(bmp, crop.x * vh, crop.y * vh, crop.w * vh, crop.h * vh, ox, oy, crop.w * k, crop.h * k);
     },
   };
 }

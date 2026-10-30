@@ -13,6 +13,8 @@ const acosDeg = (r) => deg(Math.acos(clamp(r, 0, 1)));
 // 侧面：准备时两点几乎重叠，转动后在画面上拉开，大小 = asin(间距 / 真实宽度)；
 //   前侧点朝球移动为关闭、远离球为打开，方向可以直接看出。真实宽度取整个挥杆中的最大间距
 //  （收杆时髋、肩基本转到 90°），并用身体比例兜底。
+export const OBLIQUE_RATIO = 1.12;
+
 export function rotationSeries(frames, P, { view, dir, handed, kind }) {
   const pts = (i) => {
     const b = body(frames[i].lm, handed);
@@ -22,10 +24,14 @@ export function rotationSeries(frames, P, { view, dir, handed, kind }) {
   const out = new Array(n).fill(0);
   if (view === 'fo') {
     const w1 = Math.abs(pts(P.P1)[0].x - pts(P.P1)[1].x) || 1e-6;
-    const ratio = (i) => { const [a, b] = pts(i); return Math.min(1, Math.abs(a.x - b.x) / w1); };
+    const raw = (i) => { const [a, b] = pts(i); return Math.abs(a.x - b.x) / w1; };
+    // 相机正对时，转动只会让宽度变窄；挥杆中明显比准备时还宽，说明相机是斜着拍的，转动无法估算
+    let widest = 0;
+    for (let i = P.P1; i <= P.P10; i++) widest = Math.max(widest, raw(i));
+    if (widest > OBLIQUE_RATIO) { out.fill(NaN); out.oblique = true; return out; }
     let iSq = P.P4, best = -1;
-    for (let i = P.P4; i <= P.P10; i++) { const r = ratio(i); if (r > best) { best = r; iSq = i; } }
-    for (let i = P.P1; i < n; i++) out[i] = acosDeg(ratio(i)) * (i < iSq ? 1 : -1);
+    for (let i = P.P4; i <= P.P10; i++) { const r = raw(i); if (r > best) { best = r; iSq = i; } }
+    for (let i = P.P1; i < n; i++) out[i] = acosDeg(Math.min(1, raw(i))) * (i < iSq ? 1 : -1);
     return out;
   }
   const b1 = body(frames[P.P1].lm, handed);
@@ -62,13 +68,14 @@ export function makeContext(frames, P, { view, dir, handed, club }) {
     drop: (p, p0) => (p.y - p0.y) / torso,
     spineTilt: (b) => tiltFromVertical(b.hipMid, b.shoulderMid, -dir),
     spineBend: (b) => tiltFromVertical(b.hipMid, b.shoulderMid, dir),
-    shoulderTurn: (b) => acosDeg(Math.abs(b.leadShoulder.x - b.trailShoulder.x) / Math.abs(b1.leadShoulder.x - b1.trailShoulder.x)),
-    hipTurn: (b) => acosDeg(Math.abs(b.leadHip.x - b.trailHip.x) / Math.abs(b1.leadHip.x - b1.trailHip.x)),
-    rot: (kind, pos) => {
+    series: (kind) => {
       ctx._rot ||= {};
       ctx._rot[kind] ||= rotationSeries(frames, P, { view, dir, handed, kind });
-      return ctx._rot[kind][P[pos]];
+      return ctx._rot[kind];
     },
+    // 正面相机斜拍时，髋、肩转动都无法估算
+    oblique: () => !!(ctx.series('hip').oblique || ctx.series('shoulder').oblique),
+    rot: (kind, pos) => (ctx.oblique() ? NaN : ctx.series(kind)[P[pos]]),
   };
   return ctx;
 }
@@ -132,8 +139,9 @@ export const METRICS = [
   },
   {
     id: 'fo_p4_shoulder', view: 'fo', pos: 'P4', name: '上杆顶点肩部转动（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadShoulder', 'trailShoulder'],
-    value: (c) => c.shoulderTurn(c.B('P4')),
+    value: (c) => c.rot('shoulder', 'P4'),
     range: { iron: [72, 115], driver: [78, 120] },
     about: '由正面画面中两肩投影宽度的缩短估算的肩部转动角，职业球员约 90°。仅为估算。',
     low: { issue: '肩部转动不足', why: '上杆蓄力不够，容易靠手臂发力、出现由外向内的下杆路径。', fix: '上杆到顶时让前肩转到下巴下方、背部对着目标。', drill: '双臂交叉抱胸，做转体练习，直到背部正对目标；再带杆做同样的感觉。' },
@@ -141,8 +149,9 @@ export const METRICS = [
   },
   {
     id: 'fo_p4_hip', view: 'fo', pos: 'P4', name: '上杆顶点髋部转动（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip'],
-    value: (c) => c.hipTurn(c.B('P4')),
+    value: (c) => c.rot('hip', 'P4'),
     range: { iron: [28, 62], driver: [30, 65] },
     about: '由两髋投影宽度估算的髋部转动，职业球员约 45°，肩髋差（X-factor）是下杆力量来源。',
     low: { issue: '髋部转动不足', why: '柔韧性不足或刻意锁住下半身，肩部也难以转到位，容易受伤。', fix: '允许前膝向内、后髋向后转，让髋部跟随上身转动。', drill: '双手抱杆在胸前做上杆转体，让前膝指向球的后方。' },
@@ -213,6 +222,7 @@ export const METRICS = [
   },
   {
     id: 'fo_p6_hipopen', view: 'fo', pos: 'P6', name: '下杆髋部打开（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P6'),
     range: { iron: [5, 40], driver: [3, 40] },
@@ -222,6 +232,7 @@ export const METRICS = [
   },
   {
     id: 'fo_p6_sequence', view: 'fo', pos: 'P6', name: '下杆顺序：髋先肩后', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip', 'leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P6') - c.rot('hip', 'P6'),
     range: { iron: [15, 70], driver: [15, 70] },
@@ -231,6 +242,7 @@ export const METRICS = [
   },
   {
     id: 'fo_p7_hipturn', view: 'fo', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P7'),
     range: { iron: [25, 60], driver: [25, 62] },
@@ -373,6 +385,7 @@ export const METRICS = [
   },
   {
     id: 'dtl_p4_hipturn', view: 'dtl', pos: 'P4', name: '上杆顶点髋部转动（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => c.rot('hip', 'P4'),
     range: { iron: [28, 65], driver: [30, 68] },
@@ -382,6 +395,7 @@ export const METRICS = [
   },
   {
     id: 'dtl_p4_shoulder', view: 'dtl', pos: 'P4', name: '上杆顶点肩部转动（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P4'),
     range: { iron: [62, 115], driver: [65, 120] },
@@ -400,6 +414,7 @@ export const METRICS = [
   },
   {
     id: 'dtl_p6_hipopen', view: 'dtl', pos: 'P6', name: '下杆髋部打开（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P6'),
     range: { iron: [5, 40], driver: [3, 40] },
@@ -409,6 +424,7 @@ export const METRICS = [
   },
   {
     id: 'dtl_p6_sequence', view: 'dtl', pos: 'P6', name: '下杆顺序：髋先肩后', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip', 'leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P6') - c.rot('hip', 'P6'),
     range: { iron: [15, 70], driver: [15, 70] },
@@ -436,6 +452,7 @@ export const METRICS = [
   },
   {
     id: 'dtl_p7_hipopen', view: 'dtl', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
+    rotation: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P7'),
     range: { iron: [25, 60], driver: [25, 62] },
@@ -505,6 +522,7 @@ export function evaluate(ctx) {
     } catch { value = NaN; }
     let g = grade(value, range);
     if (visibility < 0.5 && g.status !== 'na') g = { status: 'na', severity: 0, lowVis: true };
+    if (m.rotation && ctx.oblique()) g = { status: 'na', severity: 0, oblique: true };
     const advice = g.side ? m[g.side] : null;
     results.push({ metric: m, id: m.id, pos: m.pos, value, range, visibility, ...g, advice });
   }

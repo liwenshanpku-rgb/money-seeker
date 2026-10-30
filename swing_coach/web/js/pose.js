@@ -9,6 +9,7 @@ const MODELS = {
 };
 
 const cache = {};
+const SNAP_HEIGHT = 720;
 
 async function landmarker(model) {
   if (cache[model]) return cache[model];
@@ -82,6 +83,13 @@ export async function extractPoses(video, { fps = 30, start = 0, end, model = 'f
   const stop = Math.min(end ?? videoDuration(video), videoDuration(video));
   const frames = [];
   const total = Math.max(1, Math.floor((stop - start) * fps));
+  // 识别的同时把这一帧画面压缩存下来，之后画关键帧直接用它，保证画面和骨架是同一帧
+  // （iPhone 上事后再跳转视频，常常画面还没解码就被截图，背景会停在旧画面）
+  const snap = document.createElement('canvas');
+  const k = Math.min(1, SNAP_HEIGHT / video.videoHeight);
+  snap.width = Math.round(video.videoWidth * k);
+  snap.height = Math.round(video.videoHeight * k);
+  const sctx = snap.getContext('2d');
   let ts = (performance.now() | 0) + 1;
   for (let i = 0; i <= total; i++) {
     const t = Math.min(stop, start + i / fps);
@@ -89,11 +97,9 @@ export async function extractPoses(video, { fps = 30, start = 0, end, model = 'f
     ts += Math.round(1000 / fps); // detectForVideo 要求时间戳严格递增
     const res = pl.detectForVideo(video, ts);
     const raw = res.landmarks?.[0];
-    if (raw) {
-      frames.push({ t, lm: raw.map((p) => ({ x: p.x * aspect, y: p.y, v: p.visibility ?? 1 })) });
-    } else {
-      frames.push({ t, lm: null });
-    }
+    sctx.drawImage(video, 0, 0, snap.width, snap.height);
+    const img = await new Promise((r) => snap.toBlob(r, 'image/jpeg', 0.82));
+    frames.push({ t, img, lm: raw ? raw.map((p) => ({ x: p.x * aspect, y: p.y, v: p.visibility ?? 1 })) : null });
     onProgress?.((i + 1) / (total + 1));
   }
   return { frames, aspect };
@@ -107,7 +113,7 @@ export function fillMissing(frames) {
   const missing = frames.filter((f) => !f.lm).length;
   const out = frames.map((f) => {
     if (f.lm) { last = f.lm; return f; }
-    return { t: f.t, lm: last.map((p) => ({ ...p, v: 0 })) };
+    return { ...f, lm: last.map((p) => ({ ...p, v: 0 })) };
   });
   return { frames: out, missingRatio: missing / frames.length };
 }

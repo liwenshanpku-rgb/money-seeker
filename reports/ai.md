@@ -135,6 +135,18 @@ python -m money_seeker ai-record --answer answer.json --latest ai_journal/latest
 
 **注意**：仓库是公开的，`ai-journal` 分支上的决定和理由任何人都能看到。日志里没有你的持仓数量。
 
+## AI 波段模拟盘（事件触发，2026-10-30 起）
+
+目的：检验“大波动后让 AI 及时重新判断、调整仓位”有没有价值。独立记账，不影响每周决策那条记录，不下单。
+
+| 步骤 | 做什么 |
+|---|---|
+| 价格检查（每 6 小时，独立的小会话） | `python3 scripts/swing_check.py`，只用标准库：BTC 24 小时涨跌 ≥ 5% 或 72 小时 ≥ 8% 时触发；距上次波段决定不到 48 小时的，价格还要再变动 ≥ 5%；7 天最多 3 次 |
+| 触发后（唤醒有推送权限的会话） | `ai-prompt --swing trigger.json` 读规则 → 联网研究（重点是这次波动的原因和接下来 1–4 周的风险）→ `ai-swing-record` 套用相同护栏，写入 `ai_journal/swing_decisions.jsonl` 和 `swing_latest.md` |
+| 评估（每天，GitHub Actions） | `ai-review --swing-journal ...`：波段决定按记录时的盘中价成交，与每周 AI、买入持有、方案 B 在同一区间比较，写进 `review.txt` |
+
+起点仓位取每周决策的最新仓位（85%）。跑满 6 个月后，用扣除手续费和短期资本利得税之后的结果和每周 AI、方案 B 比较，再决定要不要保留。
+
 ## 需要清楚的风险
 
 1. **没有证据表明 AI 能择时**。这是一个实验，不是验证过的策略。前面的量化研究里，绝大多数看起来有道理的思路在样本外都失败了。

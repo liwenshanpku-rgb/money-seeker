@@ -455,6 +455,94 @@ def record_from_answer(
     return record
 
 
+# ---------------------------------------------------------------- AI 波段模拟盘（事件触发）
+
+SWING_MIN_GAP = pd.Timedelta(hours=6)   # 防止同一次触发被重复记录
+
+
+def swing_note(trigger: dict) -> str:
+    """附加在提示词后面的波段说明。"""
+    return "\n\n".join([
+        "## 本次是事件触发的波段评估",
+        f"价格检查在 {trigger.get('checked_at')}（UTC）发现大幅波动：{'、'.join(trigger.get('reasons', []))}；"
+        f"当前价格约 {trigger.get('price'):,.0f} 美元（盘中价，比行情快照里的收盘价更新）。",
+        "这是独立于每周决策的“AI 波段”模拟盘，用来检验在大波动后及时调整仓位有没有价值。"
+        "请重点查清这次波动的原因、是否还在发酵，以及接下来 1–4 周的风险，再给出目标仓位。"
+        "规则、护栏和输出结构与每周决策相同；当前仓位以波段模拟盘的上一次决定为准。",
+    ])
+
+
+def swing_history(swing_journal: list[dict], weekly_journal: list[dict]) -> list[dict]:
+    """给提示词看的历次决定：每周和波段合在一起，按时间排序。"""
+    return sorted(weekly_journal + swing_journal, key=lambda r: r["decided_at"])
+
+
+def swing_previous_pct(swing_journal: list[dict], weekly_journal: list[dict]) -> float | None:
+    """波段模拟盘的当前仓位：上一次波段决定；还没有时从每周决定的最新仓位起步。"""
+    if swing_journal:
+        return swing_journal[-1]["final_pct"]
+    return weekly_journal[-1]["final_pct"] if weekly_journal else None
+
+
+def record_swing(
+    answer: dict, snapshot: dict, journal_path: str | Path, weekly_journal: list[dict], trigger: dict,
+    guardrails: Guardrails | None = None, sources: list[dict] | None = None, now: datetime | None = None,
+) -> dict:
+    """校验并记录一次波段决定（独立日志），套用与每周决策相同的护栏。"""
+    now = now or datetime.now(timezone.utc)
+    decision = Decision.model_validate(answer)
+    age = (now.date() - pd.Timestamp(snapshot["as_of_close_utc"]).date()).days
+    if age > SNAPSHOT_MAX_AGE_DAYS:
+        raise ValueError(f"行情快照基于 {snapshot['as_of_close_utc']}，已过去 {age} 天，请先更新快照")
+    history = read_journal(journal_path)
+    if history and now - pd.Timestamp(history[-1]["decided_at"]).to_pydatetime() < SWING_MIN_GAP:
+        raise ValueError(f"上一次波段决定在 {history[-1]['decided_at']}，不到 6 小时，可能是重复触发")
+    previous_pct = swing_previous_pct(history, weekly_journal)
+    record = build_record(snapshot, [decision], previous_pct, guardrails or Guardrails(), ROUTINE_MODEL,
+                          sources=sources, now=now)
+    record.update(track="swing", trigger=trigger, price_at_decision=float(trigger["price"]))
+    append_journal(journal_path, record)
+    return record
+
+
+def _utc_day(ts: str) -> pd.Timestamp:
+    t = pd.Timestamp(ts)
+    return (t.tz_convert(None) if t.tzinfo else t).normalize()
+
+
+def review_swing(journal: list[dict], close: pd.Series, borrow_rate: float = 0.08, fee: float = 0.001) -> pd.Series:
+    """波段模拟盘净值（初始 1）。决定按记录时的盘中价成交：当天收益在决定前按旧仓位、决定后按新仓位计算。"""
+    from .btc_overlay import tbill_daily
+
+    if not journal:
+        raise ValueError("波段日志为空")
+    px = close.dropna()
+    start = _utc_day(journal[0]["decided_at"])
+    days = px.loc[start:].index
+    y = tbill_daily(days).fillna(0.0)
+    w = (journal[0].get("previous_pct") if journal[0].get("previous_pct") is not None
+         else journal[0]["final_pct"]) / 100
+    by_day: dict = {}
+    for r in journal:
+        by_day.setdefault(_utc_day(r["decided_at"]), []).append(r)
+    eq, out = 1.0, {}
+    for d in days:
+        prev = px.loc[:d].iloc[-2] if len(px.loc[:d]) > 1 else px.loc[d]
+        last = float(prev)
+        g = 1.0
+        for r in by_day.get(d, []):
+            p = float(r["price_at_decision"])
+            g *= 1 + w * (p / last - 1)
+            new = r["final_pct"] / 100
+            g *= 1 - abs(new - w) * fee
+            last, w = p, new
+        g *= 1 + w * (float(px.loc[d]) / last - 1)
+        g += max(1 - w, 0) * y.loc[d] - max(w - 1, 0) * borrow_rate / 365
+        eq *= g
+        out[d] = eq
+    return pd.Series(out, name="ai_swing")
+
+
 def orders(target_pct: float, price: float, btc: float, cash: float = 0.0, debt: float = 0.0) -> dict:
     """把目标仓位换算成要买卖的 BTC、借款和现金。"""
     equity = btc * price + cash - debt

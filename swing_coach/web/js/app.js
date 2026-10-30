@@ -5,7 +5,7 @@ import { smoothFrames, detectPhases, detectView } from './phases.js';
 import { makeContext, evaluate, summarize, formatValue } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
-  alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, videoSource, blankSource,
+  alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource,
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
 import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
@@ -145,6 +145,7 @@ function analyzeFrames(rawFrames, s, extra = {}) {
 function score(a) {
   const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club });
   a.results = evaluate(ctx).map((r) => ({ ...r, view: a.view }));
+  a.oblique = a.view === 'fo' && ctx.oblique();
   a.summary = summarize(a.results);
   a.ref = { lm: a.frames[a.P.P1].lm, dir: a.dir };
 }
@@ -163,7 +164,7 @@ async function analyzeVideo(video, s, label = '') {
   });
   const { frames: filled, missingRatio } = fillMissing(frames);
   if (missingRatio > 0.4) throw new Error(`${label}超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足`);
-  const a = analyzeFrames(filled, s, { aspect, source: videoSource(video) });
+  const a = analyzeFrames(filled, s, { aspect, source: frameSource(filled) });
   a.missingRatio = missingRatio;
   return a;
 }
@@ -238,6 +239,7 @@ async function renderAll() {
   }
   if (state.pro) state.pro.crop = cropBox(POSITIONS.map((p) => state.pro.frames[state.pro.P[p]].lm), state.pro.aspect);
   const warnings = list.map((a) => a.viewWarning).filter(Boolean);
+  if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
   if (warnings.length) showError(warnings.join(' '));
   renderSummary();
   renderPriorities();
@@ -335,6 +337,7 @@ function renderTable() {
         <td><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
         <td class="advice">${r.advice
           ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
+          : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
           : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。' : r.metric.about}</td>
       </tr>`).join('')}</tbody>`;
 }

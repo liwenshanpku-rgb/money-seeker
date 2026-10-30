@@ -152,10 +152,13 @@ export function pose3D(params, club = 'iron') {
 
 // 投影到 2D 图像坐标（x 向右、y 向下，单位为图像高度）
 // face-on：相机在球员正前方 (+z)，目标在画面右侧；down-the-line：相机在球员身后目标线延长线上，球在画面右侧
-export function project(j3, view, frame = { cx: 0.9, ground: 0.92, s: 0.85 }) {
+export function project(j3, view, frame = { cx: 0.9, ground: 0.92, s: 0.85 }, yaw = 0) {
   const out = {};
+  const c = Math.cos(yaw * R), sn = Math.sin(yaw * R);
   for (const [k, p] of Object.entries(j3)) {
-    const h = view === 'dtl' ? p.z : p.x;
+    // yaw：相机绕竖直轴偏转的角度（模拟斜着拍）
+    const x = p.x * c + p.z * sn, z = -p.x * sn + p.z * c;
+    const h = view === 'dtl' ? z : x;
     out[k] = { x: frame.cx + h * frame.s, y: frame.ground - p.y * frame.s, v: 1 };
   }
   return out;
@@ -190,10 +193,10 @@ function mirror3(j3) {
 }
 
 // 某个 P 位置的模板 2D 关键点 + 球杆（杆头、球）
-export function templatePose(position, { view = 'fo', club = 'iron', handed = 'right', params } = {}) {
+export function templatePose(position, { view = 'fo', club = 'iron', handed = 'right', params, yaw = 0 } = {}) {
   let j3 = pose3D(params || PRO_PARAMS[position], club);
   if (handed === 'left') j3 = mirror3(j3);
-  const j2 = project(j3, view);
+  const j2 = project(j3, view, undefined, yaw);
   return { landmarks: toLandmarks(j2, handed), clubHead: j2.clubHead, hands: j2.hands, ball: j2.ball };
 }
 
@@ -224,7 +227,7 @@ export function paramsAt(t, timing = PRO_TIMING, table = PRO_PARAMS) {
 // 生成一段合成视频的逐帧关键点：前后各有静止段
 export function syntheticSwing({
   fps = 60, lead = 0.6, tail = 0.6, view = 'fo', club = 'iron', handed = 'right',
-  timing = PRO_TIMING, table = PRO_PARAMS, noise = 0, seed = 1,
+  timing = PRO_TIMING, table = PRO_PARAMS, noise = 0, seed = 1, yaw = 0,
 } = {}) {
   let r = seed;
   const rand = () => { r = (r * 16807) % 2147483647; return r / 2147483647 - 0.5; };
@@ -233,7 +236,7 @@ export function syntheticSwing({
   for (let i = 0; Math.round(i) <= Math.round(total * fps); i++) {
     const t = i / fps;
     const params = paramsAt(t - lead, timing, table);
-    const { landmarks } = templatePose(null, { view, club, handed, params });
+    const { landmarks } = templatePose(null, { view, club, handed, params, yaw });
     frames.push({
       t,
       lm: landmarks.map((p) => ({ x: p.x + rand() * noise, y: p.y + rand() * noise, v: 0.99 })),

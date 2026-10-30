@@ -93,3 +93,17 @@ for (const view of ['fo', 'dtl']) {
     assert.equal(p7.side, 'low', `p7=${p7.value}`);
   });
 }
+
+test('正面斜着拍时，转动类指标标为无法判断而不是 0°', () => {
+  for (const yaw of [35, -35]) {
+    const s = syntheticSwing({ view: 'fo', yaw, noise: 0.001 });
+    const det = detectPhases(s.frames, { view: 'fo' });
+    const ctx = makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron' });
+    const results = evaluate(ctx);
+    assert.ok(ctx.oblique(), `yaw ${yaw} 应判为斜拍`);
+    for (const r of results.filter((x) => x.metric.rotation)) assert.equal(r.status, 'na', `${r.id} yaw ${yaw}`);
+  }
+  const s = syntheticSwing({ view: 'fo', noise: 0.001 });
+  const det = detectPhases(s.frames, { view: 'fo' });
+  assert.equal(makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron' }).oblique(), false);
+});

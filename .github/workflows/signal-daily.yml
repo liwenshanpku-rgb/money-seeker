@@ -50,7 +50,10 @@ jobs:
         run: |
           J=journal/ai_journal/decisions.jsonl
           if [ -s "$J" ]; then
-            python -m money_seeker ai-review --journal "$J" --plot journal/ai_journal/review.png \
+            S=journal/ai_journal/swing_decisions.jsonl
+            EXTRA=""
+            if [ -s "$S" ]; then EXTRA="--swing-journal $S"; fi
+            python -m money_seeker ai-review --journal "$J" $EXTRA --plot journal/ai_journal/review.png \
               | tee journal/ai_journal/review.txt
           fi
 

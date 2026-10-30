@@ -769,7 +769,13 @@ def _cmd_ai_prompt(args: argparse.Namespace) -> None:
 
     snap = json.loads(Path(args.snapshot).read_text())
     history = A.read_journal(args.journal)
-    print(A.routine_prompt(snap, history, history[-1]["final_pct"] if history else None))
+    if not args.swing:
+        print(A.routine_prompt(snap, history, history[-1]["final_pct"] if history else None))
+        return
+    swing = A.read_journal(args.swing_journal)
+    trigger = json.loads(Path(args.swing).read_text())
+    print(A.routine_prompt(snap, A.swing_history(swing, history), A.swing_previous_pct(swing, history)))
+    print("\n" + A.swing_note(trigger))
 
 
 def _cmd_ai_record(args: argparse.Namespace) -> None:
@@ -791,6 +797,27 @@ def _cmd_ai_record(args: argparse.Namespace) -> None:
     print(f"已写入日志: {Path(args.journal).resolve()}")
 
 
+def _cmd_ai_swing_record(args: argparse.Namespace) -> None:
+    from pydantic import ValidationError
+
+    from . import ai_advisor as A
+
+    snap = json.loads(Path(args.snapshot).read_text())
+    answer = json.loads(Path(args.answer).read_text())
+    trigger = json.loads(Path(args.trigger).read_text())
+    sources = json.loads(Path(args.sources).read_text()) if args.sources else None
+    try:
+        rec = A.record_swing(answer, snap, args.journal, A.read_journal(args.weekly_journal), trigger,
+                             sources=sources)
+    except (ValueError, ValidationError) as err:
+        raise SystemExit(f"没有写入波段日志：{err}")
+    text = f"【AI 波段】触发：{'、'.join(trigger.get('reasons', []))}，盘中价 {trigger['price']:,.0f}\n" + A.format_decision(rec)
+    print(text)
+    if args.latest:
+        Path(args.latest).write_text(text + "\n")
+    print(f"已写入波段日志: {Path(args.journal).resolve()}")
+
+
 def _cmd_ai_review(args: argparse.Namespace) -> None:
     from . import ai_advisor as A
 
@@ -809,6 +836,16 @@ def _cmd_ai_review(args: argparse.Namespace) -> None:
         print(table.to_string())
     if len(curves) < 180:
         print("! 样本不到半年，结果主要是噪音，不要据此下结论。")
+    swing = A.read_journal(args.swing_journal) if args.swing_journal else []
+    if swing:
+        sc = A.review_swing(swing, close, borrow_rate=args.borrow_rate)
+        base = sc.index[0] - pd.Timedelta(days=1)
+        window = {"ai_swing": sc}
+        for name in ("ai", "buy_hold", "core50_sma200"):
+            c = curves[name].loc[base:]
+            window[name] = c / c.iloc[0]
+        print(f"\nAI 波段模拟盘（自 {sc.index[0].date()} 起，{len(swing)} 次波段决定）")
+        print("  " + "   ".join(f"{k} {v.iloc[-1] - 1:+.1%}" for k, v in window.items()))
     if args.plot:
         plot_equity({k: curves[k] for k in ("ai", "buy_hold", "core50_sma200")}, args.plot,
                     title="AI position advisor - paper trading", price=close.loc[curves.index[0]:])
@@ -1074,6 +1111,7 @@ def build_parser() -> argparse.ArgumentParser:
     ar.add_argument("--journal", default="ai_journal/decisions.jsonl", help="决策日志路径")
     ar.add_argument("--borrow-rate", type=float, default=0.08, help="仓位超过 100% 时的借款年利率")
     ar.add_argument("--plot", help="保存净值对比图的路径")
+    ar.add_argument("--swing-journal", help="AI 波段模拟盘日志，给出时一并评估")
     ar.set_defaults(func=_cmd_ai_review)
 
     sn = sub.add_parser("ai-snapshot", help="只生成 AI 顾问用的行情快照（JSON），不调用 Claude")
@@ -1084,7 +1122,19 @@ def build_parser() -> argparse.ArgumentParser:
     ap = sub.add_parser("ai-prompt", help="打印给 Claude Code 定时任务的完整说明（规则、本次输入、输出结构）")
     ap.add_argument("--snapshot", default="ai_journal/snapshot.json")
     ap.add_argument("--journal", default="ai_journal/decisions.jsonl")
+    ap.add_argument("--swing", help="波段模式：触发检查输出的 JSON 文件（scripts/swing_check.py）")
+    ap.add_argument("--swing-journal", default="ai_journal/swing_decisions.jsonl")
     ap.set_defaults(func=_cmd_ai_prompt)
+
+    sw = sub.add_parser("ai-swing-record", help="校验并记录一次 AI 波段决定（独立日志，护栏相同）")
+    sw.add_argument("--answer", required=True)
+    sw.add_argument("--trigger", required=True, help="触发检查输出的 JSON 文件")
+    sw.add_argument("--snapshot", default="ai_journal/snapshot.json")
+    sw.add_argument("--journal", default="ai_journal/swing_decisions.jsonl")
+    sw.add_argument("--weekly-journal", default="ai_journal/decisions.jsonl")
+    sw.add_argument("--latest", help="同时把结果写到这个文件（例如 ai_journal/swing_latest.md）")
+    sw.add_argument("--sources")
+    sw.set_defaults(func=_cmd_ai_swing_record)
 
     rc = sub.add_parser("ai-record", help="校验定时任务给出的决定 JSON，套用护栏后写入日志")
     rc.add_argument("--answer", required=True, help="模型输出的决定 JSON 文件")

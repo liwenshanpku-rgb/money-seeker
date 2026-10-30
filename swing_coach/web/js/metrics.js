@@ -3,7 +3,7 @@
 // 区间参考公开的职业巡回赛生物力学数据与主流教学体系（如 GEARS / TPI / AimPoint 教练常用的
 // P-system 检查点），按 2D 视频可测的方式换算。2D 视频有透视误差，数值宜看趋势，不宜当作精确测量。
 
-import { body, angleAt, tiltFromVertical, clamp, deg, meanVisibility } from './geometry.js';
+import { body, angleAt, tiltFromVertical, clamp, deg, meanVisibility, sides } from './geometry.js';
 
 const acosDeg = (r) => deg(Math.acos(clamp(r, 0, 1)));
 
@@ -15,7 +15,46 @@ const acosDeg = (r) => deg(Math.acos(clamp(r, 0, 1)));
 //  （收杆时髋、肩基本转到 90°），并用身体比例兜底。
 export const OBLIQUE_RATIO = 1.12;
 
+// 用 MediaPipe 的 3D 世界坐标算转动：髋线绕竖直轴、肩线绕脊柱轴，相对准备姿势转过的角度。
+// 只看「线」的方向、不区分哪头是左哪头是右（侧面视角常把左右认反），
+// 并以上杆顶点的转动方向为「关闭」（正），这样与相机在哪一侧、左右标签是否正确都无关。
+function worldRotation(frames, P, handed, kind) {
+  const { lead, trail } = sides(handed);
+  const ia = kind === 'hip' ? lead.hip : lead.shoulder;
+  const ib = kind === 'hip' ? trail.hip : trail.shoulder;
+  const v3 = (p) => [p.x, p.y, p.z ?? 0];
+  const subv = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = (a) => { const l = Math.hypot(...a) || 1e-9; return a.map((x) => x / l); };
+  const onPlane = (v, n) => { const d = dot(v, n); return [v[0] - n[0] * d, v[1] - n[1] * d, v[2] - n[2] * d]; };
+  const axis = (w) => {
+    if (kind === 'hip') return [0, -1, 0];
+    const sh = [0, 1, 2].map((j) => (v3(w[11])[j] + v3(w[12])[j]) / 2);
+    const hp = [0, 1, 2].map((j) => (v3(w[23])[j] + v3(w[24])[j]) / 2);
+    return norm(subv(sh, hp));
+  };
+  const line = (i) => subv(v3(frames[i].wl[ia]), v3(frames[i].wl[ib]));
+  const u0 = line(P.P1);
+  const n = frames.length;
+  const out = new Array(n).fill(0);
+  let prev = 0;
+  for (let i = P.P1; i < n; i++) {
+    const ax = axis(frames[i].wl);
+    const u = onPlane(u0, ax), v = onPlane(line(i), ax);
+    let a = deg(Math.atan2(dot(ax, cross(u, v)), dot(u, v)));
+    while (a - prev > 90) a -= 180;
+    while (a - prev < -90) a += 180;
+    out[i] = a;
+    prev = a;
+  }
+  const sign = Math.sign(out[P.P4]) || 1;
+  for (let i = 0; i < n; i++) out[i] *= sign;
+  return out;
+}
+
 export function rotationSeries(frames, P, { view, dir, handed, kind }) {
+  if (frames[P.P1]?.wl) return worldRotation(frames, P, handed, kind);
   const pts = (i) => {
     const b = body(frames[i].lm, handed);
     return kind === 'hip' ? [b.leadHip, b.trailHip] : [b.leadShoulder, b.trailShoulder];
@@ -143,7 +182,7 @@ export const METRICS = [
     points: ['leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P4'),
     range: { iron: [72, 115], driver: [78, 120] },
-    about: '由正面画面中两肩投影宽度的缩短估算的肩部转动角，职业球员约 90°。仅为估算。',
+    about: '上杆顶点肩部绕脊柱转过的角度（由 3D 关键点估算），职业球员约 90°。',
     low: { issue: '肩部转动不足', why: '上杆蓄力不够，容易靠手臂发力、出现由外向内的下杆路径。', fix: '上杆到顶时让前肩转到下巴下方、背部对着目标。', drill: '双臂交叉抱胸，做转体练习，直到背部正对目标；再带杆做同样的感觉。' },
     high: { issue: '肩部转动过大', why: '可能是过度转动或上杆过长，容易失去控制和节奏。', fix: '在保持前臂伸展、后膝弯曲的前提下转到能控制的位置即可。', drill: '做 3/4 上杆练习，体会紧凑但完整的转体。' },
   },
@@ -153,7 +192,7 @@ export const METRICS = [
     points: ['leadHip', 'trailHip'],
     value: (c) => c.rot('hip', 'P4'),
     range: { iron: [28, 62], driver: [30, 65] },
-    about: '由两髋投影宽度估算的髋部转动，职业球员约 45°，肩髋差（X-factor）是下杆力量来源。',
+    about: '上杆顶点髋部转过的角度（由 3D 关键点估算），职业球员约 45°；肩髋转动差（X-factor）是下杆力量来源。',
     low: { issue: '髋部转动不足', why: '柔韧性不足或刻意锁住下半身，肩部也难以转到位，容易受伤。', fix: '允许前膝向内、后髋向后转，让髋部跟随上身转动。', drill: '双手抱杆在胸前做上杆转体，让前膝指向球的后方。' },
     high: { issue: '髋部转动过多', why: '上下半身扭转差变小，蓄力丢失；常伴随后膝伸直。', fix: '保持后膝弯曲，用髋部的阻力让肩部转动「拧」起来。', drill: '在后膝外侧放一个球，上杆时后膝不要伸直、不要外移。' },
   },
@@ -389,7 +428,7 @@ export const METRICS = [
     points: ['leadHip', 'trailHip'],
     value: (c) => c.rot('hip', 'P4'),
     range: { iron: [28, 65], driver: [30, 68] },
-    about: '侧面画面中两髋被拉开的程度估算的髋部转动，职业球员上杆顶点约 45°。',
+    about: '上杆顶点髋部转过的角度（由 3D 关键点估算），职业球员约 45°。',
     low: { issue: '上杆髋部转动不足', why: '下半身锁住，肩部也转不到位，上杆只能靠手臂抬杆，容易站起来或上杆过快。', fix: '上杆时允许后髋向后转（朝自己身后），前膝向内指向球的后方。', drill: '双手抱杆在胸前做上杆转体，转到后侧口袋朝向身后的目标线，3 组 × 10 次。' },
     high: { issue: '上杆髋部转动过多', why: '上下半身扭转差变小，蓄力丢失，常伴随后膝伸直、身体抬起。', fix: '保持后膝弯曲，用髋部的阻力让肩部转动「拧」起来。', drill: '后膝夹毛巾做上杆，到顶停 2 秒检查后膝没有伸直。' },
   },
@@ -398,8 +437,8 @@ export const METRICS = [
     rotation: true,
     points: ['leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P4'),
-    range: { iron: [62, 115], driver: [65, 120] },
-    about: '侧面画面中两肩被拉开的程度估算的肩部转动，职业球员约 90°（侧面估算通常偏小）。',
+    range: { iron: [72, 115], driver: [78, 120] },
+    about: '上杆顶点肩部绕脊柱转过的角度（由 3D 关键点估算），职业球员约 90°。',
     low: { issue: '上杆肩部转动不足', why: '蓄力不够，下杆容易用手臂发力、由外向内。', fix: '上杆到顶时前肩转到下巴下方，背部对着目标。', drill: '双臂交叉抱胸做转体，直到背部正对目标；再带杆做同样的感觉。' },
     high: null,
   },

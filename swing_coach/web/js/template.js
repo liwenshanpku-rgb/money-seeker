@@ -159,7 +159,9 @@ export function project(j3, view, frame = { cx: 0.9, ground: 0.92, s: 0.85 }, ya
     // yaw：相机绕竖直轴偏转的角度（模拟斜着拍）
     const x = p.x * c + p.z * sn, z = -p.x * sn + p.z * c;
     const h = view === 'dtl' ? z : x;
-    out[k] = { x: frame.cx + h * frame.s, y: frame.ground - p.y * frame.s, v: 1 };
+    // 相机坐标系下的 3D 位置（和 MediaPipe 世界坐标同向：x 右、y 下、z 远离相机）
+    const depth = view === 'dtl' ? x : -z;
+    out[k] = { x: frame.cx + h * frame.s, y: frame.ground - p.y * frame.s, v: 1, wx: h, wy: -p.y, wz: depth };
   }
   return out;
 }
@@ -173,7 +175,7 @@ export function toLandmarks(j2, handed = 'right') {
   const trail = handed === 'left'
     ? { sh: 11, el: 13, wr: 15, hip: 23, kn: 25, an: 27, he: 29, ft: 31 }
     : { sh: 12, el: 14, wr: 16, hip: 24, kn: 26, an: 28, he: 30, ft: 32 };
-  const set = (i, p) => { lm[i] = { x: p.x, y: p.y, v: p.v ?? 1 }; };
+  const set = (i, p) => { lm[i] = p.z === undefined ? { x: p.x, y: p.y, v: p.v ?? 1 } : { x: p.x, y: p.y, z: p.z, v: p.v ?? 1 }; };
   set(0, j2.head);
   set(lead.sh, j2.shL); set(trail.sh, j2.shT);
   set(lead.el, j2.elbowL); set(trail.el, j2.elbowT);
@@ -197,7 +199,10 @@ export function templatePose(position, { view = 'fo', club = 'iron', handed = 'r
   let j3 = pose3D(params || PRO_PARAMS[position], club);
   if (handed === 'left') j3 = mirror3(j3);
   const j2 = project(j3, view, undefined, yaw);
-  return { landmarks: toLandmarks(j2, handed), clubHead: j2.clubHead, hands: j2.hands, ball: j2.ball };
+  // MediaPipe 风格的世界坐标：以髋部中点为原点
+  const hx = (j2.hipL.wx + j2.hipT.wx) / 2, hy = (j2.hipL.wy + j2.hipT.wy) / 2, hz = (j2.hipL.wz + j2.hipT.wz) / 2;
+  const w2 = Object.fromEntries(Object.entries(j2).map(([k, p]) => [k, { x: p.wx - hx, y: p.wy - hy, z: p.wz - hz, v: 1 }]));
+  return { landmarks: toLandmarks(j2, handed), world: toLandmarks(w2, handed), clubHead: j2.clubHead, hands: j2.hands, ball: j2.ball };
 }
 
 // ---------- 合成挥杆（演示与测试用） ----------
@@ -227,7 +232,7 @@ export function paramsAt(t, timing = PRO_TIMING, table = PRO_PARAMS) {
 // 生成一段合成视频的逐帧关键点：前后各有静止段
 export function syntheticSwing({
   fps = 60, lead = 0.6, tail = 0.6, view = 'fo', club = 'iron', handed = 'right',
-  timing = PRO_TIMING, table = PRO_PARAMS, noise = 0, seed = 1, yaw = 0,
+  timing = PRO_TIMING, table = PRO_PARAMS, noise = 0, seed = 1, yaw = 0, withWorld = true,
 } = {}) {
   let r = seed;
   const rand = () => { r = (r * 16807) % 2147483647; return r / 2147483647 - 0.5; };
@@ -236,10 +241,11 @@ export function syntheticSwing({
   for (let i = 0; Math.round(i) <= Math.round(total * fps); i++) {
     const t = i / fps;
     const params = paramsAt(t - lead, timing, table);
-    const { landmarks } = templatePose(null, { view, club, handed, params, yaw });
+    const { landmarks, world: wl } = templatePose(null, { view, club, handed, params, yaw });
     frames.push({
       t,
       lm: landmarks.map((p) => ({ x: p.x + rand() * noise, y: p.y + rand() * noise, v: 0.99 })),
+      wl: withWorld ? wl.map((p) => ({ x: p.x + rand() * noise, y: p.y + rand() * noise, z: p.z + rand() * noise * 3, v: 0.99 })) : null,
     });
   }
   const truth = Object.fromEntries(POSITIONS.map((p) => [p, Math.round((lead + timing[p]) * fps)]));

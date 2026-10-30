@@ -11,39 +11,52 @@
 import { body, sub, tiltFromVertical, dist, NUM_LANDMARKS, sides } from './geometry.js';
 import { templatePose, POSITIONS } from './template.js';
 
-// 关键点平滑：低可见度点先线性插值，再做居中滑动平均
+// 关键点平滑：低可见度点先线性插值，再做居中滑动平均。
+// lm 是画面坐标；wl 是 MediaPipe 给出的 3D 世界坐标（米，以髋部为原点），有的话一起平滑。
 export function smoothFrames(frames, windowSec = 0.06, minVis = 0.3) {
   const n = frames.length;
   if (n === 0) return [];
   const dt = n > 1 ? (frames[n - 1].t - frames[0].t) / (n - 1) : 1 / 30;
   const half = Math.max(1, Math.round(windowSec / dt / 2));
-  const out = frames.map((f) => ({ t: f.t, lm: new Array(NUM_LANDMARKS) }));
-  for (let k = 0; k < NUM_LANDMARKS; k++) {
-    const xs = new Array(n), ys = new Array(n), vs = new Array(n);
-    const good = [];
-    for (let i = 0; i < n; i++) {
-      const p = frames[i].lm?.[k];
-      vs[i] = p ? (p.v ?? 1) : 0;
-      if (p && vs[i] >= minVis) { xs[i] = p.x; ys[i] = p.y; good.push(i); }
-    }
-    if (good.length === 0) {
-      for (let i = 0; i < n; i++) out[i].lm[k] = { x: 0, y: 0, v: 0 };
-      continue;
-    }
-    // 插值填补
-    let gi = 0;
-    for (let i = 0; i < n; i++) {
-      if (xs[i] !== undefined) continue;
-      while (gi < good.length - 1 && good[gi + 1] < i) gi++;
-      const a = good[gi], b = good[Math.min(gi + 1, good.length - 1)];
-      if (i <= a || a === b) { xs[i] = xs[a]; ys[i] = ys[a]; }
-      else if (i >= b) { xs[i] = xs[b]; ys[i] = ys[b]; }
-      else { const f = (i - a) / (b - a); xs[i] = xs[a] + (xs[b] - xs[a]) * f; ys[i] = ys[a] + (ys[b] - ys[a]) * f; }
-    }
-    for (let i = 0; i < n; i++) {
-      let sx = 0, sy = 0, sv = 0, c = 0;
-      for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) { sx += xs[j]; sy += ys[j]; sv += vs[j]; c++; }
-      out[i].lm[k] = { x: sx / c, y: sy / c, v: sv / c };
+  const out = frames.map((f) => ({ t: f.t }));
+  for (const key of ['lm', 'wl']) {
+    if (!frames.some((f) => f[key])) continue;
+    const dims = key === 'wl' ? ['x', 'y', 'z'] : ['x', 'y'];
+    for (const f of out) f[key] = new Array(NUM_LANDMARKS);
+    for (let k = 0; k < NUM_LANDMARKS; k++) {
+      const vals = Object.fromEntries(dims.map((d) => [d, new Array(n)]));
+      const vs = new Array(n);
+      const good = [];
+      for (let i = 0; i < n; i++) {
+        const p = frames[i][key]?.[k];
+        vs[i] = p ? (p.v ?? 1) : 0;
+        if (p && vs[i] >= minVis) { for (const d of dims) vals[d][i] = p[d] ?? 0; good.push(i); }
+      }
+      if (good.length === 0) {
+        for (let i = 0; i < n; i++) out[i][key][k] = { x: 0, y: 0, z: 0, v: 0 };
+        continue;
+      }
+      // 插值填补
+      let gi = 0;
+      for (let i = 0; i < n; i++) {
+        if (vals.x[i] !== undefined) continue;
+        while (gi < good.length - 1 && good[gi + 1] < i) gi++;
+        const a = good[gi], b = good[Math.min(gi + 1, good.length - 1)];
+        for (const d of dims) {
+          const xs = vals[d];
+          if (i <= a || a === b) xs[i] = xs[a];
+          else if (i >= b) xs[i] = xs[b];
+          else xs[i] = xs[a] + (xs[b] - xs[a]) * ((i - a) / (b - a));
+        }
+      }
+      for (let i = 0; i < n; i++) {
+        const lo = Math.max(0, i - half), hi = Math.min(n - 1, i + half), c = hi - lo + 1;
+        const p = {};
+        for (const d of dims) { let sum = 0; for (let j = lo; j <= hi; j++) sum += vals[d][j]; p[d] = sum / c; }
+        let sv = 0; for (let j = lo; j <= hi; j++) sv += vs[j];
+        p.v = sv / c;
+        out[i][key][k] = p;
+      }
     }
   }
   return out;
@@ -135,10 +148,22 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
   const v0 = view || detectView(frames[Math.max(0, i4 - sec(1))].lm, handed);
   const still = (v0 === 'dtl' ? 0.03 : 0.06) * vmax;
 
-  // P1：从顶点往回找，第一段「静止且双手低位」的帧
+  // P1：从顶点往回找，第一段「静止且双手低位」的帧。
+  // 有 3D 坐标时用双手的 3D 速度判断静止（侧面视角起杆时双手主要朝镜头纵深移动，画面上几乎不动）
+  let still1 = (i) => speed[i] < still;
+  if (frames[0].wl) {
+    const { lead, trail } = sides(handed);
+    const h3 = frames.map((f) => { const a = f.wl[lead.wrist], b = f.wl[trail.wrist]; return [(a.x + b.x) / 2, (a.y + b.y) / 2, ((a.z ?? 0) + (b.z ?? 0)) / 2]; });
+    const sp3 = h3.map((_, i) => {
+      const a = h3[Math.max(0, i - 1)], b = h3[Math.min(n - 1, i + 1)];
+      return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) / (dt * (Math.min(n - 1, i + 1) - Math.max(0, i - 1)));
+    });
+    const vmax3 = Math.max(...sp3.slice(edge, n - edge));
+    still1 = (i) => sp3[i] < 0.05 * vmax3;
+  }
   let i1 = 0;
   for (let i = i4 - 1; i >= 0; i--) {
-    if (speed[i] < still && hands[i].y > hands[i4].y + 0.75 * swingH) { i1 = i; break; }
+    if (still1(i) && hands[i].y > hands[i4].y + 0.75 * swingH) { i1 = i; break; }
   }
   // P10：击球后双手抬高到一半以上，然后重新静止
   let i10 = n - 1;

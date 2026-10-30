@@ -156,7 +156,13 @@ export async function extractPoses(video, { fps = 30, start = 0, end, model = 'f
     const res = pl.detectForVideo(video, ts);
     const raw = res.landmarks?.[0];
     const img = await grab(video);
-    frames.push({ t, img, lm: raw ? raw.map((p) => ({ x: p.x * aspect, y: p.y, v: p.visibility ?? 1 })) : null });
+    const world = res.worldLandmarks?.[0];
+    frames.push({
+      t, img,
+      lm: raw ? raw.map((p) => ({ x: p.x * aspect, y: p.y, v: p.visibility ?? 1 })) : null,
+      // 3D 世界坐标（米，以髋部中点为原点），用来算髋、肩的转动
+      wl: raw && world ? world.map((p, j) => ({ x: p.x, y: p.y, z: p.z, v: raw[j].visibility ?? 1 })) : null,
+    });
     onProgress?.((i + 1) / (total + 1));
   }
   return { frames, aspect };
@@ -166,11 +172,11 @@ export async function extractPoses(video, { fps = 30, start = 0, end, model = 'f
 export function fillMissing(frames) {
   const firstGood = frames.find((f) => f.lm);
   if (!firstGood) throw new Error('视频中没有检测到人体，请确认整个身体都在画面内');
-  let last = firstGood.lm;
+  let last = firstGood.lm, lastW = firstGood.wl;
   const missing = frames.filter((f) => !f.lm).length;
   const out = frames.map((f) => {
-    if (f.lm) { last = f.lm; return f; }
-    return { ...f, lm: last.map((p) => ({ ...p, v: 0 })) };
+    if (f.lm) { last = f.lm; lastW = f.wl || lastW; return f; }
+    return { ...f, lm: last.map((p) => ({ ...p, v: 0 })), wl: lastW ? lastW.map((p) => ({ ...p, v: 0 })) : null };
   });
   return { frames: out, missingRatio: missing / frames.length };
 }

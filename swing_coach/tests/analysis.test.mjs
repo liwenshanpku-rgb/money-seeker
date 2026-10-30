@@ -42,7 +42,7 @@ for (const view of ['fo', 'dtl']) {
 test('正面：识别反向重心、重心不转移和翻腕', () => {
   const table = structuredClone(PRO_PARAMS);
   Object.assign(table.P4, { tilt: -6, shiftX: 0.03 });
-  Object.assign(table.P7, { shiftX: 0.0, arm: 12, tilt: 10 });
+  Object.assign(table.P7, { shiftX: -0.02, arm: 12, tilt: 10 });
   const { byId, results } = run({ table });
   assert.notEqual(byId.fo_p4_tilt.status, 'good');
   assert.equal(byId.fo_p4_tilt.side, 'low');
@@ -94,16 +94,50 @@ for (const view of ['fo', 'dtl']) {
   });
 }
 
-test('正面斜着拍时，转动类指标标为无法判断而不是 0°', () => {
-  for (const yaw of [35, -35]) {
-    const s = syntheticSwing({ view: 'fo', yaw, noise: 0.001 });
+test('有 3D 坐标时，正面斜着拍也能算出转动角度', () => {
+  const at = (opts) => {
+    const s = syntheticSwing({ view: 'fo', noise: 0.001, ...opts });
     const det = detectPhases(s.frames, { view: 'fo' });
     const ctx = makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron' });
-    const results = evaluate(ctx);
-    assert.ok(ctx.oblique(), `yaw ${yaw} 应判为斜拍`);
-    for (const r of results.filter((x) => x.metric.rotation)) assert.equal(r.status, 'na', `${r.id} yaw ${yaw}`);
+    return { ctx, byId: Object.fromEntries(evaluate(ctx).map((r) => [r.id, r])) };
+  };
+  const square = at({});
+  for (const yaw of [35, -35]) {
+    const { ctx, byId } = at({ yaw });
+    assert.equal(ctx.oblique(), false);
+    for (const id of ['fo_p4_shoulder', 'fo_p4_hip', 'fo_p7_hipturn']) {
+      assert.equal(byId[id].status, 'good', `${id} yaw ${yaw} = ${byId[id].value}`);
+      assert.ok(Math.abs(byId[id].value - square.byId[id].value) < 6, `${id} yaw ${yaw}: ${byId[id].value} vs ${square.byId[id].value}`);
+    }
   }
-  const s = syntheticSwing({ view: 'fo', noise: 0.001 });
-  const det = detectPhases(s.frames, { view: 'fo' });
-  assert.equal(makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron' }).oblique(), false);
+});
+
+test('没有 3D 坐标时（只有 2D），正面斜拍的转动类指标标为无法判断', () => {
+  for (const yaw of [35, -35]) {
+    const s = syntheticSwing({ view: 'fo', yaw, noise: 0.001, withWorld: false });
+    const det = detectPhases(s.frames, { view: 'fo' });
+    const ctx = makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron' });
+    assert.ok(ctx.oblique(), `yaw ${yaw} 应判为斜拍`);
+    for (const r of evaluate(ctx).filter((x) => x.metric.rotation)) assert.equal(r.status, 'na', `${r.id} yaw ${yaw}`);
+  }
+});
+
+test('侧面视角左右关键点被认反时，转动方向和大小不受影响', () => {
+  const swap = (lm) => {
+    const out = lm.slice();
+    for (const [a, b] of [[11, 12], [13, 14], [15, 16], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]]) { out[a] = lm[b]; out[b] = lm[a]; }
+    return out;
+  };
+  const s = syntheticSwing({ view: 'dtl', noise: 0.001 });
+  // 模拟识别模型在挥杆中途反复把左右认反
+  const flipped = s.frames.map((f, i) => (Math.floor(i / 7) % 2 ? { ...f, lm: swap(f.lm), wl: swap(f.wl) } : f));
+  const val = (frames) => {
+    const det = detectPhases(frames, { view: 'dtl' });
+    const ctx = makeContext(det.frames, det.P, { view: 'dtl', dir: det.dir, handed: 'right', club: 'iron' });
+    return [ctx.rot('hip', 'P4'), ctx.rot('shoulder', 'P4'), -ctx.rot('hip', 'P7')];
+  };
+  const [h, sh, h7] = val(s.frames);
+  const [fh, fsh, fh7] = val(flipped);
+  assert.ok(h > 30 && sh > 60 && h7 > 25, `${h} ${sh} ${h7}`);
+  assert.ok(Math.abs(fh - h) < 8 && Math.abs(fsh - sh) < 8 && Math.abs(fh7 - h7) < 8, `${fh} ${fsh} ${fh7} vs ${h} ${sh} ${h7}`);
 });

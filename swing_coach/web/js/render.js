@@ -101,7 +101,7 @@ export function drawClub(ctx, hands, clubHead, toPx, color, width = 2) {
 }
 
 // 在 canvas 上画一帧：背景（视频画面或纯色）+ 用户骨架 + 可选模板
-export async function drawFrame(canvas, source, frame, crop, { template, showTemplate = true, label, labelSize = 15 } = {}) {
+export async function drawFrame(canvas, source, frame, crop, { template, showTemplate = true, label, labelSize = 15, color = COLORS.user, joint = COLORS.userJoint } = {}) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const k = Math.min(W / crop.w, H / crop.h);
@@ -114,7 +114,7 @@ export async function drawFrame(canvas, source, frame, crop, { template, showTem
     drawSkeleton(ctx, template.landmarks, toPx, { color: COLORS.pro, width: 3, dash: [7, 5], alpha: 0.9 });
     drawClub(ctx, template.hands, template.clubHead, toPx, COLORS.pro);
   }
-  drawSkeleton(ctx, frame.lm, toPx, { color: COLORS.user, joint: COLORS.userJoint, width: 3 });
+  drawSkeleton(ctx, frame.lm, toPx, { color, joint, width: 3 });
   if (label) {
     ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';

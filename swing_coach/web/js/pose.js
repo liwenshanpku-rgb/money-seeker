@@ -137,7 +137,7 @@ function frameGrabber(width, height) {
 }
 
 // 逐帧提取关键点。返回 [{t, lm: [{x, y, v}]}]，x 已乘宽高比（单位 = 视频高度）
-export async function extractPoses(video, { fps = 30, start = 0, end, model = 'full', onProgress } = {}) {
+export async function extractPoses(video, { fps = 30, start = 0, end, model = 'full', onProgress, snapshots = true } = {}) {
   await ensureReady(video);
   const pl = await landmarker(model);
   const aspect = video.videoWidth / video.videoHeight;
@@ -147,7 +147,7 @@ export async function extractPoses(video, { fps = 30, start = 0, end, model = 'f
   // 识别的同时把这一帧画面压缩存下来，之后画关键帧直接用它，保证画面和骨架是同一帧
   // （iPhone 上事后再跳转视频，常常画面还没解码就被截图，背景会停在旧画面）
   const k = Math.min(1, SNAP_HEIGHT / video.videoHeight);
-  const grab = frameGrabber(Math.round(video.videoWidth * k), Math.round(video.videoHeight * k));
+  const grab = snapshots ? frameGrabber(Math.round(video.videoWidth * k), Math.round(video.videoHeight * k)) : async () => null;
   let ts = (performance.now() | 0) + 1;
   for (let i = 0; i <= total; i++) {
     const t = Math.min(stop, start + i / fps);

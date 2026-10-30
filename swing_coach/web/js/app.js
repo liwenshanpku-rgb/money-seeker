@@ -1,7 +1,7 @@
 // 页面逻辑：上传 → 姿态识别 → P1–P10 检测 → 指标评估 → 渲染对比结果 →（可选）AI 教练点评
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
-import { smoothFrames, detectPhases } from './phases.js';
+import { smoothFrames, detectPhases, detectView } from './phases.js';
 import { makeContext, evaluate, summarize, formatValue } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
@@ -12,10 +12,14 @@ import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './s
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
-const VIEW_TEXT = { fo: '正面（Face-on）', dtl: '侧面（Down-the-line）' };
 const CLUB_TEXT = { iron: '铁杆', driver: '一号木' };
 
-const state = { user: null, pro: null, videoURL: null, proURL: null };
+const VIEWS = ['fo', 'dtl'];
+const VIEW_SHORT = { fo: '正面', dtl: '侧面' };
+
+// views：每个拍摄角度一份分析结果；pro：可选的职业视频（只和同角度的结果对比）；active：校正面板当前选中的角度
+const state = { views: { fo: null, dtl: null }, pro: null, active: null, proURL: null };
+const slots = Object.fromEntries(VIEWS.map((v) => [v, { url: null, video: $(`video-${v}`) }]));
 
 // 手机上逐帧识别较慢，默认 30fps
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
@@ -25,45 +29,84 @@ function settings() {
   return {
     handed: $('handed').value,
     club: $('club').value,
-    view: $('view').value === 'auto' ? undefined : $('view').value,
     fps: Number($('fps').value),
     model: $('model').value,
-    start: Number($('start').value) || 0,
-    end: Number($('end').value) || undefined,
   };
 }
 
-// ---------- 上传 ----------
-const drop = $('drop');
-drop.addEventListener('click', () => $('file').click());
-drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-drop.addEventListener('drop', (e) => {
-  e.preventDefault();
-  drop.classList.remove('over');
-  const f = e.dataTransfer.files?.[0];
-  if (f) loadVideo(f);
-});
-$('file').addEventListener('change', (e) => e.target.files[0] && loadVideo(e.target.files[0]));
+const analyses = () => VIEWS.map((v) => state.views[v]).filter(Boolean);
+const hasVideo = (v) => !!slots[v].url;
 
-function loadVideo(file) {
-  if (state.videoURL) URL.revokeObjectURL(state.videoURL);
-  state.videoURL = URL.createObjectURL(file);
-  const v = $('video');
-  v.src = state.videoURL;
-  v.load();
-  v.onloadedmetadata = () => {
-    drop.classList.add('has-video');
-    $('start').value = 0;
-    $('end').value = Math.min(videoDuration(v), 15).toFixed(1);
-    $('analyze').disabled = false;
-    if (videoDuration(v) > 15) showError('视频超过 15 秒，默认只分析前 15 秒；可以调整「分析区间」只包含一次挥杆。');
+// ---------- 上传（正面、侧面两个位置，各自可选） ----------
+for (const v of VIEWS) {
+  const drop = $(`drop-${v}`);
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    const f = e.dataTransfer.files?.[0];
+    if (f) loadVideo(v, f);
+  });
+  $(`file-${v}`).addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    e.target.value = ''; // 允许再次选择同一个文件
+    if (f) loadVideo(v, f);
+  });
+}
+document.querySelectorAll('[data-clear]').forEach((btn) => btn.addEventListener('click', () => clearSlot(btn.dataset.clear)));
+
+function loadVideo(v, file) {
+  const slot = slots[v];
+  if (slot.url) URL.revokeObjectURL(slot.url);
+  slot.url = URL.createObjectURL(file);
+  const video = slot.video;
+  video.src = slot.url;
+  video.load();
+  video.onloadedmetadata = () => {
+    $(`drop-${v}`).classList.add('has-video');
+    $(`foot-${v}`).hidden = false;
+    $(`start-${v}`).value = 0;
+    $(`end-${v}`).value = Math.min(videoDuration(video), 15).toFixed(1);
+    if (videoDuration(video) > 15) showError(`${VIEW_SHORT[v]}视频超过 15 秒，默认只分析前 15 秒；可以调整区间只包含一次挥杆。`);
     else hideError();
+    updateAnalyzeButton();
   };
 }
+
+function clearSlot(v) {
+  const slot = slots[v];
+  if (slot.url) URL.revokeObjectURL(slot.url);
+  slot.url = null;
+  slot.video.removeAttribute('src');
+  slot.video.load();
+  $(`drop-${v}`).classList.remove('has-video');
+  $(`foot-${v}`).hidden = true;
+  updateAnalyzeButton();
+}
+
+function updateAnalyzeButton() {
+  const n = VIEWS.filter(hasVideo).length;
+  $('analyze').disabled = n === 0;
+  $('analyze').textContent = n === 2 ? '开始分析（正面 + 侧面）' : '开始分析';
+}
+
+// 结果页的「分析新视频」：清掉旧结果，回到上传区
+$('newAnalysis').addEventListener('click', () => {
+  VIEWS.forEach(clearSlot);
+  state.views = { fo: null, dtl: null };
+  state.pro = null;
+  $('results').hidden = true;
+  $('coach').disabled = true;
+  $('prepareShare').disabled = true;
+  $('coachOut').innerHTML = '';
+  hideError();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 
 $('proFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
+  e.target.value = '';
   if (!file) return;
   if (state.proURL) URL.revokeObjectURL(state.proURL);
   state.proURL = URL.createObjectURL(file);
@@ -74,9 +117,9 @@ $('proFile').addEventListener('change', async (e) => {
   await new Promise((r) => { if (v.readyState >= 1) r(); else v.onloadedmetadata = r; });
   await primed;
   $('proStatus').textContent = `已选择：${file.name}，分析时会一并处理`;
-  if (state.user && !state.user.demo) {
+  if (analyses().length && !analyses()[0].demo) {
     try {
-      state.pro = await analyzeVideo(v, { ...settings(), start: 0, end: Math.min(videoDuration(v), 15) }, '职业视频');
+      state.pro = await analyzeVideo(v, { ...settings(), start: 0, end: Math.min(videoDuration(v), 15) }, '职业视频：');
       await renderAll();
     } catch (err) { showError(`职业视频分析失败：${err.message}`); }
   }
@@ -90,15 +133,26 @@ function analyzeFrames(rawFrames, s, extra = {}) {
     ...extra, settings: s, raw: rawFrames, frames: smoothed, speed: det.speed,
     view: det.view, dir: det.dir, autoP: { ...det.P }, P: { ...det.P },
   };
+  // 用户指定了角度但画面看起来不像：提醒一下（仍按用户指定的角度分析）
+  if (s.view) {
+    const guess = detectView(smoothed[det.P.P1].lm, s.handed);
+    if (guess !== s.view) a.viewWarning = `${VIEW_SHORT[s.view]}位置的视频看起来更像${VIEW_SHORT[guess]}拍摄，请确认放对了位置。`;
+  }
   score(a);
   return a;
 }
 
 function score(a) {
   const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club });
-  a.results = evaluate(ctx);
+  a.results = evaluate(ctx).map((r) => ({ ...r, view: a.view }));
   a.summary = summarize(a.results);
   a.ref = { lm: a.frames[a.P.P1].lm, dir: a.dir };
+}
+
+// 所有角度合在一起的结果
+function combined() {
+  const results = analyses().flatMap((a) => a.results);
+  return { results, summary: summarize(results) };
 }
 
 async function analyzeVideo(video, s, label = '') {
@@ -108,7 +162,7 @@ async function analyzeVideo(video, s, label = '') {
     onProgress: (f) => setProgress(f, `${label}识别姿态 ${Math.round(f * 100)}%`),
   });
   const { frames: filled, missingRatio } = fillMissing(frames);
-  if (missingRatio > 0.4) throw new Error('超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足');
+  if (missingRatio > 0.4) throw new Error(`${label}超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足`);
   const a = analyzeFrames(filled, s, { aspect, source: videoSource(video) });
   a.missingRatio = missingRatio;
   return a;
@@ -116,17 +170,25 @@ async function analyzeVideo(video, s, label = '') {
 
 $('analyze').addEventListener('click', async () => {
   // 必须在点击事件里同步调用（iPhone 要求播放由用户手势触发）
-  const primed = [primeVideo($('video')), $('proVideo').src ? primeVideo($('proVideo')) : null];
+  const todo = VIEWS.filter(hasVideo);
+  const primed = [...todo.map((v) => primeVideo(slots[v].video)), $('proVideo').src ? primeVideo($('proVideo')) : null];
   hideError();
   $('analyze').disabled = true;
   try {
     await Promise.all(primed);
     const s = settings();
-    state.user = await analyzeVideo($('video'), s);
+    const views = { fo: null, dtl: null };
+    for (const v of todo) {
+      const video = slots[v].video;
+      const start = Number($(`start-${v}`).value) || 0;
+      const end = Number($(`end-${v}`).value) || undefined;
+      views[v] = await analyzeVideo(video, { ...s, view: v, start, end }, todo.length > 1 ? `${VIEW_SHORT[v]}：` : '');
+    }
+    state.views = views;
     state.pro = null;
     if ($('proVideo').src) {
       const pv = $('proVideo');
-      state.pro = await analyzeVideo(pv, { ...s, view: state.user.view, start: 0, end: Math.min(videoDuration(pv), 15) }, '职业视频：');
+      state.pro = await analyzeVideo(pv, { ...s, start: 0, end: Math.min(videoDuration(pv), 15) }, '职业视频：');
     }
     setProgress(1, '完成');
     await renderAll();
@@ -134,81 +196,109 @@ $('analyze').addEventListener('click', async () => {
     console.error(err);
     showError(err.message || String(err));
   } finally {
-    $('analyze').disabled = false;
+    updateAnalyzeButton();
     setTimeout(() => { $('progress').hidden = true; }, 800);
   }
 });
 
-// 示例：一个带典型业余问题的合成挥杆（反向脊柱角、重心没转移、翻腕、节奏偏快）
+// 示例：带典型业余问题的合成挥杆（反向脊柱角、重心没转移、下杆转髋不够、节奏偏快），正面 + 侧面各一段
 $('demo').addEventListener('click', async () => {
   hideError();
-  const s = { ...settings(), view: 'fo' };
+  const s = settings();
   const table = structuredClone(PRO_PARAMS);
-  Object.assign(table.P4, { tilt: -6, shiftX: 0.02, shoulder: 78 });
-  Object.assign(table.P5, { shiftX: 0.0, tilt: 4 });
-  Object.assign(table.P6, { shiftX: 0.0, tilt: 8 });
-  Object.assign(table.P7, { shiftX: 0.005, tilt: 12, arm: 10, hip: -18 });
+  Object.assign(table.P4, { tilt: -6, shiftX: 0.02, shoulder: 78, bend: 33 });
+  Object.assign(table.P5, { shiftX: 0.0, tilt: 4, hip: 30, shoulder: 52 });
+  Object.assign(table.P6, { shiftX: 0.0, tilt: 8, hip: 10, shoulder: 14 });
+  Object.assign(table.P7, { shiftX: 0.005, tilt: 12, arm: 10, hip: -12, shoulder: -10 });
   Object.assign(table.P8, { shiftX: 0.01 });
   Object.assign(table.P10, { shiftX: 0.02, tilt: 26 });
   const timing = { ...PRO_TIMING, P2: 0.2, P3: 0.4, P4: 0.62, P5: 0.76, P6: 0.83, P7: 0.9, P8: 0.98, P9: 1.1, P10: 1.5 };
-  const { frames } = syntheticSwing({ fps: 60, view: 'fo', club: s.club, handed: s.handed, table, timing, noise: 0.002 });
-  state.user = analyzeFrames(frames, s, { aspect: 16 / 9, source: blankSource(), demo: true });
+  const views = {};
+  for (const v of VIEWS) {
+    const { frames } = syntheticSwing({ fps: 60, view: v, club: s.club, handed: s.handed, table, timing, noise: 0.002, seed: v === 'fo' ? 1 : 7 });
+    views[v] = analyzeFrames(frames, { ...s, view: v }, { aspect: 16 / 9, source: blankSource(), demo: true });
+  }
+  state.views = views;
   state.pro = null;
   await renderAll();
 });
 
 // ---------- 渲染 ----------
 async function renderAll() {
-  const u = state.user;
+  const list = analyses();
+  if (!list.length) return;
   $('results').hidden = false;
   $('coach').disabled = false;
   $('prepareShare').disabled = false;
   $('sharePanel').hidden = true;
   $('cardPanel').hidden = true;
-  u.crop = cropBox(POSITIONS.map((p) => u.frames[u.P[p]].lm).concat(
-    POSITIONS.map((p) => alignTemplate(p, u.ref, opts(u)).landmarks)), u.aspect);
+  for (const a of list) {
+    a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm).concat(
+      POSITIONS.map((p) => alignTemplate(p, a.ref, opts(a)).landmarks)), a.aspect);
+  }
   if (state.pro) state.pro.crop = cropBox(POSITIONS.map((p) => state.pro.frames[state.pro.P[p]].lm), state.pro.aspect);
+  const warnings = list.map((a) => a.viewWarning).filter(Boolean);
+  if (warnings.length) showError(warnings.join(' '));
   renderSummary();
   renderPriorities();
   renderTable();
   setupScrub();
   await renderPositions();
-  await drawHandPath($('pathCanvas'), u.source, u.frames, u.P, u.crop, {
-    handed: u.settings.handed, templatePath: templateHandPath(u.ref, opts(u)),
-  });
+  const paths = $('paths');
+  paths.innerHTML = '';
+  for (const a of list) {
+    const c = document.createElement('canvas');
+    c.width = 560; c.height = 560;
+    paths.appendChild(c);
+    await drawHandPath(c, a.source, a.frames, a.P, a.crop, {
+      handed: a.settings.handed, templatePath: templateHandPath(a.ref, opts(a)),
+      label: list.length > 1 ? `手部轨迹 · ${VIEW_SHORT[a.view]}` : undefined,
+    });
+  }
   $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const opts = (a) => ({ view: a.view, club: a.settings.club, handed: a.settings.handed });
+const multi = () => analyses().length > 1;
+const viewTag = (r) => (multi() ? `<span class="tag">${VIEW_SHORT[r.view]}</span>` : '');
+
+function tempoText(a) {
+  const r = a.results.find((x) => x.id === 'tempo');
+  return r && Number.isFinite(r.value) ? `${r.value.toFixed(1)} : 1` : '—';
+}
 
 function renderSummary() {
-  const u = state.user;
-  const { score: sc, counts } = u.summary;
+  const list = analyses();
+  const { summary } = combined();
+  const { score: sc, counts } = summary;
   $('score').textContent = sc ?? '–';
   $('ring').style.strokeDashoffset = String(327 * (1 - (sc ?? 0) / 100));
-  const tempo = u.results.find((r) => r.id === 'tempo');
-  const t = (p) => u.frames[u.P[p]].t;
+  const first = list[0];
   $('facts').innerHTML = [
-    ['拍摄角度', VIEW_TEXT[u.view]],
-    ['球杆 / 惯用手', `${CLUB_TEXT[u.settings.club]} · ${u.settings.handed === 'left' ? '左手' : '右手'}`],
-    ['节奏 上杆:下杆', tempo && Number.isFinite(tempo.value) ? `${tempo.value.toFixed(1)} : 1` : '—'],
-    ['上杆 / 下杆用时', `${(t('P4') - t('P1')).toFixed(2)}s / ${(t('P7') - t('P4')).toFixed(2)}s`],
-    ...(u.demo ? [['数据来源', '示例合成挥杆']] : []),
-    ...(state.pro ? [['对比模板', '职业模板 + 你上传的职业视频']] : [['对比模板', '内置职业模板']]),
+    ['拍摄角度', list.map((a) => VIEW_SHORT[a.view]).join(' + ') + (list.length === 1 ? '（可再传另一个角度）' : '')],
+    ['球杆 / 惯用手', `${CLUB_TEXT[first.settings.club]} · ${first.settings.handed === 'left' ? '左手' : '右手'}`],
+    ['节奏 上杆:下杆', list.map((a) => (multi() ? `${VIEW_SHORT[a.view]} ${tempoText(a)}` : tempoText(a))).join('，')],
+    ...list.map((a) => {
+      const t = (p) => a.frames[a.P[p]].t;
+      return [`上杆 / 下杆用时${multi() ? `（${VIEW_SHORT[a.view]}）` : ''}`, `${(t('P4') - t('P1')).toFixed(2)}s / ${(t('P7') - t('P4')).toFixed(2)}s`];
+    }),
+    ...(first.demo ? [['数据来源', '示例合成挥杆']] : []),
+    ...(state.pro ? [['对比模板', `职业模板 + 职业视频（${VIEW_SHORT[state.pro.view]}）`]] : [['对比模板', '内置职业模板']]),
   ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
   $('counts').innerHTML = ['good', 'warn', 'bad', 'na']
     .map((s) => `<div><span class="chip ${s}">${STATUS_TEXT[s]}</span> ${counts[s]} 项</div>`).join('');
 }
 
 function renderPriorities() {
-  const pr = state.user.summary.priorities;
+  const pr = combined().summary.priorities;
   if (!pr.length) {
-    $('priorities').innerHTML = '<li><b>各项检查都在职业区间内，继续保持！</b><div class="detail">可以拍另一个角度（正面 / 侧面）再检查一次。</div></li>';
+    const tip = multi() ? '继续保持！' : '可以再拍另一个角度（正面 / 侧面）检查一次。';
+    $('priorities').innerHTML = `<li><b>各项检查都在职业区间内，继续保持！</b><div class="detail">${tip}</div></li>`;
     return;
   }
   $('priorities').innerHTML = pr.map((r) => `
     <li>
-      <b>${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}</b> <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span>
+      <b>${viewTag(r)}${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}</b> <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span>
       <div class="detail">${r.metric.name}：${formatValue(r.metric, r.value)}（职业区间 ${fmtRange(r)}）。${r.advice.why}</div>
       <div class="drill"><b>怎么改：</b>${r.advice.fix}</div>
       <div class="drill"><b>练习：</b>${r.advice.drill}</div>
@@ -223,22 +313,24 @@ function fmtRange(r) {
   return `${lo} – ${hi} ${m.unit}`;
 }
 
-function proValue(id) {
-  const r = state.pro?.results.find((x) => x.id === id);
-  return r ? formatValue(r.metric, r.value) : null;
+function proValue(r) {
+  if (!state.pro || state.pro.view !== r.view) return null;
+  const p = state.pro.results.find((x) => x.id === r.id);
+  return p ? formatValue(p.metric, p.value) : null;
 }
 
 function renderTable() {
-  const rows = state.user.results;
+  const rows = combined().results;
   const hasPro = !!state.pro;
   $('metricsTable').innerHTML = `
-    <thead><tr><th>位置</th><th>检查项</th><th>你的数值</th>${hasPro ? '<th>职业视频</th>' : ''}<th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
+    <thead><tr>${multi() ? '<th>视角</th>' : ''}<th>位置</th><th>检查项</th><th>你的数值</th>${hasPro ? '<th>职业视频</th>' : ''}<th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
     <tbody>${rows.map((r) => `
       <tr>
+        ${multi() ? `<td>${VIEW_SHORT[r.view]}</td>` : ''}
         <td>${r.pos}</td>
         <td>${r.metric.name}</td>
         <td class="num">${formatValue(r.metric, r.value)}</td>
-        ${hasPro ? `<td class="num">${proValue(r.id) ?? '—'}</td>` : ''}
+        ${hasPro ? `<td class="num">${proValue(r) ?? '—'}</td>` : ''}
         <td class="num">${fmtRange(r)}</td>
         <td><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
         <td class="advice">${r.advice
@@ -248,53 +340,75 @@ function renderTable() {
 }
 
 async function renderPositions() {
-  const u = state.user;
+  const list = analyses();
   const show = $('showTemplate').checked;
   const box = $('positions');
+  const byPos = combined().summary.byPos;
   box.innerHTML = '';
+  // 每张卡片：各角度的画面（+ 同角度的职业视频）
+  const panes = [];
+  for (const a of list) {
+    panes.push({ a, pro: false });
+    if (state.pro && state.pro.view === a.view) panes.push({ a: state.pro, pro: true });
+  }
+  box.classList.toggle('multi', panes.length > 1);
   for (const pos of POSITIONS) {
     const card = document.createElement('div');
     card.className = 'pos-card';
-    const items = u.summary.byPos[pos] || [];
+    const items = byPos[pos] || [];
+    const times = list.map((a) => `${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${a.frames[a.P[pos]].t.toFixed(2)}s`).join(' · ');
     card.innerHTML = `
-      <div class="imgs ${state.pro ? 'with-pro' : ''}"><canvas width="360" height="420"></canvas>${state.pro ? '<canvas width="360" height="420"></canvas>' : ''}</div>
+      <div class="imgs n${panes.length}">${panes.map(() => '<canvas width="360" height="420"></canvas>').join('')}</div>
       <div class="body">
-        <h3>${pos} ${POSITION_INFO[pos].name}<span>${u.frames[u.P[pos]].t.toFixed(2)}s</span></h3>
+        <h3>${pos} ${POSITION_INFO[pos].name}<span>${times}</span></h3>
         <div class="muted" style="font-size:12.5px">${POSITION_INFO[pos].desc}</div>
-        <ul>${items.map((r) => `<li><span>${r.metric.name}</span><span>${formatValue(r.metric, r.value)} <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></span></li>`).join('')}</ul>
+        <ul>${items.map((r) => `<li><span>${viewTag(r)}${r.metric.name}</span><span>${formatValue(r.metric, r.value)} <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></span></li>`).join('')}</ul>
       </div>`;
     box.appendChild(card);
-    const [c1, c2] = card.querySelectorAll('canvas');
-    await drawFrame(c1, u.source, u.frames[u.P[pos]], u.crop, {
-      template: alignTemplate(pos, u.ref, opts(u)), showTemplate: show, label: state.pro ? `你 · ${pos}` : pos,
-    });
-    if (c2) {
-      const p = state.pro;
-      await drawFrame(c2, p.source, p.frames[p.P[pos]], p.crop, { label: `职业 · ${pos}` });
+    const canvases = card.querySelectorAll('canvas');
+    for (let i = 0; i < panes.length; i++) {
+      const { a, pro } = panes[i];
+      const who = pro ? '职业' : multi() || state.pro ? `你${multi() ? '·' + VIEW_SHORT[a.view] : ''}` : '';
+      await drawFrame(canvases[i], a.source, a.frames[a.P[pos]], a.crop, {
+        template: pro ? null : alignTemplate(pos, a.ref, opts(a)), showTemplate: show,
+        label: who ? `${who} · ${pos}` : pos,
+      });
     }
     card.dataset.pos = pos;
   }
 }
 
-$('showTemplate').addEventListener('change', () => state.user && renderPositions());
+$('showTemplate').addEventListener('change', () => analyses().length && renderPositions());
 
 // ---------- 手动校正 ----------
+const activeA = () => state.views[state.active] || analyses()[0];
+
 function setupScrub() {
-  const u = state.user;
+  const list = analyses();
+  if (!state.views[state.active]) state.active = list[0].view;
+  const sel = $('scrubView');
+  sel.hidden = list.length < 2;
+  sel.innerHTML = list.map((a) => `<option value="${a.view}">${VIEW_SHORT[a.view]}视频</option>`).join('');
+  sel.value = state.active;
+  const u = activeA();
   const sl = $('scrub');
   sl.max = u.frames.length - 1;
-  sl.value = u.P.P4;
-  $('assignPos').innerHTML = POSITIONS.map((p) => `<option value="${p}">${p} ${POSITION_INFO[p].name}</option>`).join('');
-  $('assignPos').value = 'P4';
+  sl.value = u.P[$('assignPos').value] ?? u.P.P4;
+  if (!$('assignPos').options.length) {
+    $('assignPos').innerHTML = POSITIONS.map((p) => `<option value="${p}">${p} ${POSITION_INFO[p].name}</option>`).join('');
+    $('assignPos').value = 'P4';
+    sl.value = u.P.P4;
+  }
   drawScrub();
 }
+$('scrubView').addEventListener('change', () => { state.active = $('scrubView').value; setupScrub(); });
 
 let scrubBusy = false, scrubPending = false;
 async function drawScrub() {
   if (scrubBusy) { scrubPending = true; return; }
   scrubBusy = true;
-  const u = state.user;
-  const i = Number($('scrub').value);
+  const u = activeA();
+  const i = Math.min(Number($('scrub').value), u.frames.length - 1);
   const at = POSITIONS.filter((p) => u.P[p] === i);
   await drawFrame($('scrubCanvas'), u.source, u.frames[i], u.crop, { label: `第 ${i} 帧 · ${u.frames[i].t.toFixed(2)}s${at.length ? ` · ${at.join(' / ')}` : ''}` });
   drawTimeline($('timeline'), u.speed, u.frames, u.P, i);
@@ -302,20 +416,20 @@ async function drawScrub() {
   if (scrubPending) { scrubPending = false; drawScrub(); }
 }
 $('scrub').addEventListener('input', drawScrub);
-$('assignPos').addEventListener('change', () => { $('scrub').value = state.user.P[$('assignPos').value]; drawScrub(); });
+$('assignPos').addEventListener('change', () => { $('scrub').value = activeA().P[$('assignPos').value]; drawScrub(); });
 
 $('assign').addEventListener('click', async () => {
-  const u = state.user;
-  u.P[$('assignPos').value] = Number($('scrub').value);
+  activeA().P[$('assignPos').value] = Number($('scrub').value);
   await rescore();
 });
 $('resetPhases').addEventListener('click', async () => {
-  state.user.P = { ...state.user.autoP };
+  const u = activeA();
+  u.P = { ...u.autoP };
   await rescore();
 });
 
 async function rescore() {
-  score(state.user);
+  score(activeA());
   const keep = $('scrub').value;
   await renderAll();
   $('scrub').value = keep;
@@ -336,36 +450,48 @@ function coachClient() {
   return new GitHubCoach($('ghRepo').value.trim(), $('ghToken').value.trim());
 }
 
-// 关键帧：withVideo 为 false 时只画骨架（不含视频画面）
-async function keyframeCanvases(u, withVideo, { width = 480, height = 560, labelSize = 15 } = {}) {
-  const source = withVideo ? u.source : blankSource();
+// 关键帧（所有角度）：withVideo 为 false 时只画骨架（不含视频画面）
+async function keyframeCanvases(withVideo, { width = 480, height = 560, labelSize = 15 } = {}) {
   const out = [];
-  for (const pos of POSITIONS) {
-    const canvas = document.createElement('canvas');
-    canvas.width = width; canvas.height = height;
-    await drawFrame(canvas, source, u.frames[u.P[pos]], u.crop, {
-      template: alignTemplate(pos, u.ref, opts(u)), label: `${pos} ${POSITION_INFO[pos].name}`, labelSize,
-    });
-    out.push(canvas);
+  for (const a of analyses()) {
+    const source = withVideo ? a.source : blankSource();
+    for (const pos of POSITIONS) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const label = `${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos} ${POSITION_INFO[pos].name}`;
+      await drawFrame(canvas, source, a.frames[a.P[pos]], a.crop, {
+        template: alignTemplate(pos, a.ref, opts(a)), label, labelSize,
+      });
+      out.push({ canvas, pos, view: a.view });
+    }
   }
   return out;
 }
 
-async function keyframeImages(u, withVideo) {
-  const canvases = await keyframeCanvases(u, withVideo);
-  return canvases.map((c, i) => ({ pos: POSITIONS[i], data: c.toDataURL('image/jpeg', 0.8) }));
+async function keyframeImages(withVideo) {
+  return (await keyframeCanvases(withVideo)).map((k) => ({ pos: k.pos, view: k.view, data: k.canvas.toDataURL('image/jpeg', 0.8) }));
 }
 
-// 发给 AI 的测量数据（两种方式共用）
-function coachData(u, withVideo) {
+const isDemo = () => !!analyses()[0]?.demo;
+
+// 发给 AI 的测量数据（两种方式共用，包含所有角度）
+function coachData(withVideo) {
+  const list = analyses();
+  const first = list[0];
+  const timing = (a) => Object.fromEntries(POSITIONS.map((p) => [p, Number(a.frames[a.P[p]].t.toFixed(3))]));
+  const { results, summary } = combined();
   return {
-    settings: { handed: u.settings.handed, club: u.settings.club, view: u.view, demo: !!u.demo, skeletonOnly: !withVideo },
+    settings: {
+      handed: first.settings.handed, club: first.settings.club,
+      view: list.length === 1 ? first.view : 'both', views: list.map((a) => a.view),
+      demo: isDemo(), skeletonOnly: !withVideo,
+    },
     note: $('coachNote').value.trim(),
-    score: u.summary.score,
-    timing: Object.fromEntries(POSITIONS.map((p) => [p, Number(u.frames[u.P[p]].t.toFixed(3))])),
-    metrics: u.results.map((r) => ({
-      pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
-      status: r.status, issue: r.advice?.issue ?? null, pro_value: proValue(r.id),
+    score: summary.score,
+    timing: list.length === 1 ? timing(first) : Object.fromEntries(list.map((a) => [VIEW_SHORT[a.view], timing(a)])),
+    metrics: results.map((r) => ({
+      view: VIEW_SHORT[r.view], pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
+      status: r.status, issue: r.advice?.issue ?? null, pro_value: proValue(r),
     })),
   };
 }
@@ -374,28 +500,29 @@ function coachData(u, withVideo) {
 const card = { file: null, url: null };
 
 $('makeCard').addEventListener('click', async () => {
-  const u = state.user;
-  if (!u) return;
+  const list = analyses();
+  if (!list.length) return;
   $('makeCard').disabled = true;
   try {
-    const withVideo = $('cardFrames').checked && !u.demo;
-    const tempo = u.results.find((r) => r.id === 'tempo');
+    const withVideo = $('cardFrames').checked && !isDemo();
+    const { summary } = combined();
+    const first = list[0];
     const canvas = resultCard({
-      score: u.summary.score,
-      counts: u.summary.counts,
+      score: summary.score,
+      counts: summary.counts,
       facts: [
-        ['拍摄角度', u.view === 'fo' ? '正面' : '侧面'],
-        ['球杆', `${CLUB_TEXT[u.settings.club]} · ${u.settings.handed === 'left' ? '左手' : '右手'}`],
-        ['节奏 上杆:下杆', tempo && Number.isFinite(tempo.value) ? `${tempo.value.toFixed(1)} : 1（职业约 3:1）` : '—'],
+        ['拍摄角度', list.map((a) => VIEW_SHORT[a.view]).join(' + ')],
+        ['球杆', `${CLUB_TEXT[first.settings.club]} · ${first.settings.handed === 'left' ? '左手' : '右手'}`],
+        ['节奏 上杆:下杆（职业约 3:1）', list.map((a) => tempoText(a)).join(' / ')],
       ],
-      priorities: u.summary.priorities.map((r) => ({
+      priorities: summary.priorities.map((r) => ({
         status: r.status,
-        title: `${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}`,
+        title: `${multi() ? `[${VIEW_SHORT[r.view]}] ` : ''}${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}`,
         detail: `${r.metric.name}：${formatValue(r.metric, r.value)}，职业区间 ${fmtRange(r)}`,
         fix: r.advice.fix,
       })),
-      frames: await keyframeCanvases(u, withVideo, { width: 360, height: 420, labelSize: 30 }),
-      footer: `${u.demo ? '示例数据 · ' : ''}挥杆教练 P1–P10 分析 · ${location.host}${location.pathname}`,
+      frames: (await keyframeCanvases(withVideo, { width: 360, height: 420, labelSize: 30 })).map((k) => k.canvas),
+      footer: `${isDemo() ? '示例数据 · ' : ''}挥杆教练 P1–P10 分析 · ${location.host}${location.pathname}`,
     });
     const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
     if (card.url) URL.revokeObjectURL(card.url);
@@ -426,19 +553,18 @@ let coachPrompt = null;
 const share = { text: '', file: null, url: null };
 
 $('prepareShare').addEventListener('click', async () => {
-  const u = state.user;
-  if (!u) return;
+  if (!analyses().length) return;
   $('prepareShare').disabled = true;
   $('shareStatus').textContent = '';
   try {
     coachPrompt ||= await fetch('coach-prompt.md').then((r) => { if (!r.ok) throw new Error('读取提示词失败'); return r.text(); });
-    const withVideo = $('shareFrames').checked && !u.demo;
-    const big = montage(await keyframeCanvases(u, withVideo, { width: 360, height: 420, labelSize: 22 }));
+    const withVideo = $('shareFrames').checked && !isDemo();
+    const big = montage((await keyframeCanvases(withVideo, { width: 360, height: 420, labelSize: 22 })).map((k) => k.canvas));
     const blob = await canvasToBlob(big);
     if (share.url) URL.revokeObjectURL(share.url);
     share.url = URL.createObjectURL(blob);
     share.file = new File([blob], 'swing-p1-p10.jpg', { type: 'image/jpeg' });
-    share.text = buildShareText(coachPrompt, coachData(u, withVideo));
+    share.text = buildShareText(coachPrompt, coachData(withVideo));
     $('shareImg').src = share.url;
     $('saveImg').href = share.url;
     $('sharePanel').hidden = false;
@@ -485,8 +611,7 @@ async function waitAndShow(gh, id) {
 }
 
 $('coach').addEventListener('click', async () => {
-  const u = state.user;
-  if (!u) return;
+  if (!analyses().length) return;
   const out = $('coachOut');
   $('coach').disabled = true;
   try {
@@ -494,8 +619,8 @@ $('coach').addEventListener('click', async () => {
     store.set(KEY_REPO, gh.repo);
     store.set(KEY_TOKEN, gh.token);
     out.innerHTML = '<p class="muted">正在生成关键帧并提交…</p>';
-    const withVideo = $('sendFrames').checked && !u.demo;
-    const payload = { ...coachData(u, withVideo), images: await keyframeImages(u, withVideo) };
+    const withVideo = $('sendFrames').checked && !isDemo();
+    const payload = { ...coachData(withVideo), images: await keyframeImages(withVideo) };
     const id = await gh.submit(payload);
     store.set(KEY_LAST, id);
     $('coachLast').hidden = false;

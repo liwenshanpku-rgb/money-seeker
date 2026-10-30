@@ -7,6 +7,44 @@ import { body, angleAt, tiltFromVertical, clamp, deg, meanVisibility } from './g
 
 const acosDeg = (r) => deg(Math.acos(clamp(r, 0, 1)));
 
+// 髋部 / 肩部转动角（相对准备姿势，上杆方向为正、朝目标打开为负），逐帧。
+// 正面：两点水平间距按 cos 缩短，大小 = acos(宽度比)；方向用时间判断——
+//   P4 之后宽度最大的那一帧是「转回正对」的时刻，之前算关闭、之后算打开。
+// 侧面：准备时两点几乎重叠，转动后在画面上拉开，大小 = asin(间距 / 真实宽度)；
+//   前侧点朝球移动为关闭、远离球为打开，方向可以直接看出。真实宽度取整个挥杆中的最大间距
+//  （收杆时髋、肩基本转到 90°），并用身体比例兜底。
+export function rotationSeries(frames, P, { view, dir, handed, kind }) {
+  const pts = (i) => {
+    const b = body(frames[i].lm, handed);
+    return kind === 'hip' ? [b.leadHip, b.trailHip] : [b.leadShoulder, b.trailShoulder];
+  };
+  const n = frames.length;
+  const out = new Array(n).fill(0);
+  if (view === 'fo') {
+    const w1 = Math.abs(pts(P.P1)[0].x - pts(P.P1)[1].x) || 1e-6;
+    const ratio = (i) => { const [a, b] = pts(i); return Math.min(1, Math.abs(a.x - b.x) / w1); };
+    let iSq = P.P4, best = -1;
+    for (let i = P.P4; i <= P.P10; i++) { const r = ratio(i); if (r > best) { best = r; iSq = i; } }
+    for (let i = P.P1; i < n; i++) out[i] = acosDeg(ratio(i)) * (i < iSq ? 1 : -1);
+    return out;
+  }
+  const b1 = body(frames[P.P1].lm, handed);
+  const torso = Math.hypot(b1.shoulderMid.x - b1.hipMid.x, b1.shoulderMid.y - b1.hipMid.y) || 1e-6;
+  // 肩部绕前倾的脊柱转动，侧面画面里肩线会变斜，所以用整段长度；方向看前肩是朝球、朝下（关闭）还是相反
+  const sep = (i) => {
+    const [a, b] = pts(i);
+    const dx = (a.x - b.x) * dir, dy = a.y - b.y;
+    if (kind === 'hip') return dx;
+    return Math.hypot(dx, dy) * (dx + dy >= 0 ? 1 : -1);
+  };
+  let W = (kind === 'hip' ? 0.6 : 0.95) * torso;
+  for (let i = P.P1; i <= P.P10; i++) W = Math.max(W, Math.abs(sep(i)));
+  const ang = (i) => deg(Math.asin(clamp(sep(i) / W, -1, 1)));
+  const a1 = ang(P.P1);
+  for (let i = P.P1; i < n; i++) out[i] = ang(i) - a1;
+  return out;
+}
+
 // 指标计算所需的上下文
 export function makeContext(frames, P, { view, dir, handed, club }) {
   const B = (pos) => body(frames[P[pos]].lm, handed);
@@ -26,6 +64,11 @@ export function makeContext(frames, P, { view, dir, handed, club }) {
     spineBend: (b) => tiltFromVertical(b.hipMid, b.shoulderMid, dir),
     shoulderTurn: (b) => acosDeg(Math.abs(b.leadShoulder.x - b.trailShoulder.x) / Math.abs(b1.leadShoulder.x - b1.trailShoulder.x)),
     hipTurn: (b) => acosDeg(Math.abs(b.leadHip.x - b.trailHip.x) / Math.abs(b1.leadHip.x - b1.trailHip.x)),
+    rot: (kind, pos) => {
+      ctx._rot ||= {};
+      ctx._rot[kind] ||= rotationSeries(frames, P, { view, dir, handed, kind });
+      return ctx._rot[kind][P[pos]];
+    },
   };
   return ctx;
 }
@@ -169,6 +212,33 @@ export const METRICS = [
     high: { issue: '头部前冲（越过球）', why: '上身抢先，出杆角度过陡，容易拉左、打深草皮。', fix: '下杆让下半身先动，头部留在球后方。', drill: '在头部前侧放一根竖杆作为参照，下杆到击球头不要越过它。' },
   },
   {
+    id: 'fo_p6_hipopen', view: 'fo', pos: 'P6', name: '下杆髋部打开（估算）', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip'],
+    value: (c) => -c.rot('hip', 'P6'),
+    range: { iron: [5, 40], driver: [3, 40] },
+    about: '杆身下到与地面平行时，髋部朝目标打开的角度（估算，负值表示还没转回正对）。职业球员此时髋部已经打开 10–25°，比肩部先转。',
+    low: { issue: '下杆转髋不够（髋部滞后）', why: '下杆没有由下半身启动，手臂和肩膀先把杆拉下来，容易出现由外向内的路径、左拉或为了救球翻手。', fix: '到顶点后先让前侧臀部向后、向目标方向转（感觉前侧裤兜往身后走），手臂「等一下」，被身体转动带下来。', drill: '贴墙转髋：准备时臀部轻碰身后的墙，下杆时让前侧臀部沿墙往后滑、后侧臀部离开墙。空手 2 组 × 10 次，再拿杆半挥 20 次。' },
+    high: { issue: '下杆髋部打开过早过多', why: '下半身转得太快，手臂跟不上，杆面容易打开、推右。', fix: '转换时先把重心压向前脚，再转髋；保持上下半身的衔接。', drill: '「暂停下杆」：上杆到顶停 1 秒，再以中速下杆，体会髋和手臂一起到达击球位置。' },
+  },
+  {
+    id: 'fo_p6_sequence', view: 'fo', pos: 'P6', name: '下杆顺序：髋先肩后', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip', 'leadShoulder', 'trailShoulder'],
+    value: (c) => c.rot('shoulder', 'P6') - c.rot('hip', 'P6'),
+    range: { iron: [15, 70], driver: [15, 70] },
+    about: '杆身与地面平行时，髋部比肩部多打开的角度（估算）。职业球员下杆是「髋 → 胸 → 手臂 → 杆」依次加速，此时髋部明显比肩部更开。',
+    low: { issue: '肩膀和手臂抢先（下杆顺序反了）', why: '上半身先发力，髋部没有领先，力量传递断掉，常见结果是由外向内切球、左拉、右曲或杆头速度上不去。', fix: '转换时想「先下半身、后上半身」：前膝先向目标侧移动、前髋向后转，肩膀保持关闭久一点。', drill: '「泵杆练习」：上杆到顶，只让髋部启动、把双手下放到腰高（P6），再回到顶点，重复 2 次后第 3 次完整挥出。每组 5 球，做 3 组。' },
+    high: null,
+  },
+  {
+    id: 'fo_p7_hipturn', view: 'fo', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip'],
+    value: (c) => -c.rot('hip', 'P7'),
+    range: { iron: [25, 60], driver: [25, 62] },
+    about: '击球瞬间髋部朝目标打开的角度（估算），职业球员约 35–45°。',
+    low: { issue: '击球时髋部打开不足', why: '下半身没带动，靠手臂发力，容易翻腕、拉左，杆头速度也受限。', fix: '下杆由下半身启动，击球时腰带扣朝向球的左前方。', drill: '在腰带环里横插一根对齐杆，慢速挥到击球位置停住：杆应该指向目标左侧约 40°，而不是平行于目标线。' },
+    high: { issue: '击球时髋部打开过多', why: '上下身不同步，手臂跟不上，杆面打开推右。', fix: '保持下杆节奏，让手臂和身体一起到达击球位置。', drill: '慢速 9 点–3 点半挥杆，体会身体与手臂同步。' },
+  },
+  {
     id: 'fo_p7_shift', view: 'fo', pos: 'P7', name: '击球时骨盆前移', unit: '× 站宽', digits: 2,
     points: ['leadHip', 'trailHip'],
     value: (c) => c.toTarget(c.B('P7').hipMid, c.b1.hipMid),
@@ -203,15 +273,6 @@ export const METRICS = [
     about: '击球时上半身向后侧倾斜。骨盆前移、头在球后，自然形成这个侧倾。',
     low: { issue: '击球时上身过直 / 倒向目标', why: '通常伴随上身抢先，出杆过陡，打深草皮或拉左。', fix: '下杆时让骨盆前移、头留后，后肩向下向前转。', drill: '下杆慢动作，击球位置停住，检查后肩是否低于前肩。' },
     high: { issue: '击球时后仰过多', why: '最低点后移，容易打厚、挑球，一号木打出高飘球。', fix: '减少刻意后仰，让胸口在击球时朝向球。', drill: '在后肩后方放对齐杆参照，击球时不要往后倒。' },
-  },
-  {
-    id: 'fo_p7_hipturn', view: 'fo', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
-    points: ['leadHip', 'trailHip'],
-    value: (c) => c.hipTurn(c.B('P7')),
-    range: { iron: [22, 60], driver: [25, 62] },
-    about: '击球瞬间髋部朝目标打开的幅度（估算），职业球员约 35–45°。',
-    low: { issue: '击球时髋部打开不足', why: '下半身没带动，靠手臂发力，容易翻腕、拉左。', fix: '下杆由下半身启动，击球时腰带扣朝向球的前方。', drill: '双手抱胸做下杆转体，击球位置让腰带扣朝向目标前方。' },
-    high: { issue: '击球时髋部打开过多', why: '上下身不同步，手臂跟不上，杆面打开推右。', fix: '保持下杆节奏，让手臂和身体一起到达击球位置。', drill: '慢速 9 点–3 点半挥杆，体会身体与手臂同步。' },
   },
   {
     id: 'fo_p7_leadknee', view: 'fo', pos: 'P7', name: '击球时前腿支撑', unit: '°', digits: 0,
@@ -311,6 +372,24 @@ export const METRICS = [
     high: { issue: '上杆时臀部向球靠近', why: '失去髋部空间，下杆手臂没有通道，容易起身、打出右推或杆根球。', fix: '上杆时后髋向后转（朝自己身后），而不是向球推。', drill: '臀部贴墙练习：上杆时后侧臀部始终贴墙。' },
   },
   {
+    id: 'dtl_p4_hipturn', view: 'dtl', pos: 'P4', name: '上杆顶点髋部转动（估算）', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip'],
+    value: (c) => c.rot('hip', 'P4'),
+    range: { iron: [28, 65], driver: [30, 68] },
+    about: '侧面画面中两髋被拉开的程度估算的髋部转动，职业球员上杆顶点约 45°。',
+    low: { issue: '上杆髋部转动不足', why: '下半身锁住，肩部也转不到位，上杆只能靠手臂抬杆，容易站起来或上杆过快。', fix: '上杆时允许后髋向后转（朝自己身后），前膝向内指向球的后方。', drill: '双手抱杆在胸前做上杆转体，转到后侧口袋朝向身后的目标线，3 组 × 10 次。' },
+    high: { issue: '上杆髋部转动过多', why: '上下半身扭转差变小，蓄力丢失，常伴随后膝伸直、身体抬起。', fix: '保持后膝弯曲，用髋部的阻力让肩部转动「拧」起来。', drill: '后膝夹毛巾做上杆，到顶停 2 秒检查后膝没有伸直。' },
+  },
+  {
+    id: 'dtl_p4_shoulder', view: 'dtl', pos: 'P4', name: '上杆顶点肩部转动（估算）', unit: '°', digits: 0,
+    points: ['leadShoulder', 'trailShoulder'],
+    value: (c) => c.rot('shoulder', 'P4'),
+    range: { iron: [62, 115], driver: [65, 120] },
+    about: '侧面画面中两肩被拉开的程度估算的肩部转动，职业球员约 90°（侧面估算通常偏小）。',
+    low: { issue: '上杆肩部转动不足', why: '蓄力不够，下杆容易用手臂发力、由外向内。', fix: '上杆到顶时前肩转到下巴下方，背部对着目标。', drill: '双臂交叉抱胸做转体，直到背部正对目标；再带杆做同样的感觉。' },
+    high: null,
+  },
+  {
     id: 'dtl_p6_hips', view: 'dtl', pos: 'P6', name: '下杆臀部位置（提前伸展）', unit: '× 躯干', digits: 2,
     points: ['leadHip', 'trailHip'],
     value: (c) => c.toBall(c.B('P6').hipMid, c.b1.hipMid),
@@ -318,6 +397,24 @@ export const METRICS = [
     about: '下杆到杆身平行时骨盆朝球的移动。臀部向球顶出就是「提前伸展」（early extension），业余球员中极为常见。',
     low: { issue: '下杆臀部后退过多', why: '通常伴随上身前冲。', fix: '下杆时让前髋向后上方转，保持胸口朝下。', drill: '慢速下杆检查臀部线。' },
     high: { issue: '提前伸展：下杆臀部向球顶出', why: '手臂下杆通道被堵，身体起立，导致杆根球、推右、左曲交替出现。', fix: '下杆时让前侧臀部向后（朝着身后）转，保持臀部在准备时的「臀线」后方。', drill: '臀部贴墙练习：准备时臀部轻触墙，下杆到击球时前侧臀部仍然碰墙。' },
+  },
+  {
+    id: 'dtl_p6_hipopen', view: 'dtl', pos: 'P6', name: '下杆髋部打开（估算）', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip'],
+    value: (c) => -c.rot('hip', 'P6'),
+    range: { iron: [5, 40], driver: [3, 40] },
+    about: '杆身下到与地面平行时髋部朝目标打开的角度（估算）。从侧面看，职业球员此时前侧髋部已经开始向后让开。',
+    low: { issue: '下杆转髋不够（髋部滞后）', why: '下杆没有由下半身启动，手臂和肩膀先把杆拉下来，容易左拉、翻手或打出不稳定的球路。', fix: '到顶点后先让前侧臀部向后、向目标方向转（感觉前侧裤兜往身后走），手臂「等一下」，被身体转动带下来。', drill: '贴墙转髋：准备时臀部轻碰身后的墙，下杆时让前侧臀部沿墙往后滑、后侧臀部离开墙。空手 2 组 × 10 次，再拿杆半挥 20 次。' },
+    high: { issue: '下杆髋部打开过早过多', why: '下半身转得太快，手臂跟不上，杆面容易打开、推右。', fix: '转换时先把重心压向前脚，再转髋。', drill: '上杆到顶停 1 秒再以中速下杆，体会髋和手臂一起到达击球位置。' },
+  },
+  {
+    id: 'dtl_p6_sequence', view: 'dtl', pos: 'P6', name: '下杆顺序：髋先肩后', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip', 'leadShoulder', 'trailShoulder'],
+    value: (c) => c.rot('shoulder', 'P6') - c.rot('hip', 'P6'),
+    range: { iron: [15, 70], driver: [15, 70] },
+    about: '杆身与地面平行时，髋部比肩部多打开的角度（估算）。职业球员此时髋部明显领先肩部。',
+    low: { issue: '肩膀和手臂抢先（下杆顺序反了）', why: '上半身先发力，髋部没有领先，力量传递断掉，常见由外向内切球、左拉、右曲或杆头速度上不去。', fix: '转换时想「先下半身、后上半身」：前膝先向目标侧移动、前髋向后转，肩膀保持关闭久一点。', drill: '「泵杆练习」：上杆到顶，只让髋部启动、把双手下放到腰高（P6），再回到顶点，重复 2 次后第 3 次完整挥出。每组 5 球，做 3 组。' },
+    high: null,
   },
   {
     id: 'dtl_p7_bend', view: 'dtl', pos: 'P7', name: '击球时脊柱角保持', unit: '°', digits: 1,
@@ -336,6 +433,15 @@ export const METRICS = [
     about: '击球时骨盆朝球的移动，正值越大提前伸展越严重。',
     low: { issue: '击球时臀部后退过多', why: '重心后移，可能上身前冲。', fix: '保持重心在脚掌中部。', drill: '慢速击球检查臀部线。' },
     high: { issue: '提前伸展：击球时臀部顶向球', why: '身体起立、手臂无路可走，杆面难以控制。', fix: '下杆时前髋向后上方转，击球时臀部仍在准备时的臀线上或后方。', drill: '在臀部后方放一把椅子，击球时臀部保持轻触椅背。' },
+  },
+  {
+    id: 'dtl_p7_hipopen', view: 'dtl', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
+    points: ['leadHip', 'trailHip'],
+    value: (c) => -c.rot('hip', 'P7'),
+    range: { iron: [25, 60], driver: [25, 62] },
+    about: '击球瞬间髋部朝目标打开的角度（估算），职业球员约 35–45°。从侧面看，前侧髋部已经让开，能看到更多的后侧臀部。',
+    low: { issue: '击球时髋部打开不足', why: '下半身没带动，靠手臂发力，容易翻腕、拉左，杆头速度也受限。', fix: '下杆由下半身启动，击球时腰带扣朝向球的左前方。', drill: '在腰带环里横插一根对齐杆，慢速挥到击球位置停住：杆应该指向目标左侧约 40°。' },
+    high: { issue: '击球时髋部打开过多', why: '上下身不同步，杆面打开推右。', fix: '保持下杆节奏，让手臂和身体一起到达击球位置。', drill: '慢速 9 点–3 点半挥杆，体会身体与手臂同步。' },
   },
   {
     id: 'dtl_p7_head', view: 'dtl', pos: 'P7', name: '击球时头部高度', unit: '× 躯干', digits: 2,

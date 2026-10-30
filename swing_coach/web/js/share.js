@@ -3,28 +3,34 @@
 
 const STATUS = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
 
+const VIEW_NAME = { fo: '正面（face-on）', dtl: '侧面（down-the-line）', both: '正面 + 侧面（两段视频，可能是不同的挥杆）' };
+
 export function buildShareText(prompt, { settings, score, timing, metrics, note }) {
   const lines = [
     prompt.trim(),
     '',
     '# 基本信息',
     `惯用手：${settings.handed === 'left' ? '左手' : '右手'}；球杆：${settings.club === 'driver' ? '一号木' : '铁杆'}；` +
-      `拍摄角度：${settings.view === 'fo' ? '正面（face-on）' : '侧面（down-the-line）'}；程序综合评分：${score ?? '—'}`,
+      `拍摄角度：${VIEW_NAME[settings.view] || settings.view}；程序综合评分：${score ?? '—'}`,
   ];
   if (timing) {
-    lines.push(`各位置时间（秒）：${Object.entries(timing).map(([p, t]) => `${p} ${t}`).join('，')}`);
+    const fmt = (t) => Object.entries(t).map(([p, v]) => `${p} ${v}`).join('，');
+    const nested = Object.values(timing).some((v) => typeof v === 'object');
+    if (nested) for (const [view, t] of Object.entries(timing)) lines.push(`各位置时间（秒，${view}）：${fmt(t)}`);
+    else lines.push(`各位置时间（秒）：${fmt(timing)}`);
   }
   if (settings.demo) lines.push('注意：这是程序合成的示例挥杆（只有骨架，没有真实画面）。');
   lines.push('', '# 程序测量结果（2D 视频估算）');
+  const multiView = settings.view === 'both';
   for (const m of metrics) {
-    let s = `- ${m.pos} ${m.name}：${m.value}（职业区间 ${m.pro_range}）→ ${STATUS[m.status] || m.status}`;
+    let s = `- ${multiView && m.view ? `[${m.view}] ` : ''}${m.pos} ${m.name}：${m.value}（职业区间 ${m.pro_range}）→ ${STATUS[m.status] || m.status}`;
     if (m.issue) s += `，${m.issue}`;
     if (m.pro_value) s += `；职业视频 ${m.pro_value}`;
     lines.push(s);
   }
   const n = (note || '').trim();
   if (n) lines.push('', `# 我的补充`, n.slice(0, 500));
-  lines.push('', '请看附图（P1–P10 关键帧拼图）并给出教练点评。');
+  lines.push('', `请看附图（${multiView ? '正面和侧面的 ' : ''}P1–P10 关键帧拼图）并给出教练点评。`);
   return lines.join('\n');
 }
 

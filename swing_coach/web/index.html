@@ -17,20 +17,41 @@
   <header class="top">
     <div class="wrap">
       <h1>挥杆教练 <span>P1–P10 挥杆分析</span></h1>
-      <p class="lead">上传一段挥杆视频，自动识别 10 个关键位置，逐项对比职业挥杆模板，指出问题并给出改进方法和练习。视频只在你的浏览器里处理，不会上传。</p>
+      <p class="lead">上传正面和 / 或侧面挥杆视频，自动识别 10 个关键位置，逐项对比职业挥杆模板，指出问题并给出改进方法和练习。视频只在你的浏览器里处理，不会上传。</p>
     </div>
   </header>
 
   <main class="wrap">
     <section class="panel" id="upload">
-      <div class="drop" id="drop">
-        <input type="file" id="file" accept="video/*" hidden>
-        <video id="video" playsinline muted preload="auto"></video>
-        <div class="drop-hint" id="dropHint">
-          <strong>点击或拖入挥杆视频</strong>
-          <span>正面或侧面拍摄，全身入镜，3–10 秒，最好 60fps 以上</span>
+      <div class="slots">
+        <div class="slot" data-view="fo">
+          <div class="slot-head"><b>正面（Face-on）</b><span class="muted small">相机正对胸口</span></div>
+          <label class="drop" for="file-fo" id="drop-fo">
+            <video id="video-fo" playsinline muted preload="auto"></video>
+            <span class="drop-hint"><strong>＋ 选择正面视频</strong><span>看重心转移、头部、侧倾、转髋</span></span>
+          </label>
+          <input type="file" id="file-fo" accept="video/*" hidden>
+          <div class="slot-foot" id="foot-fo" hidden>
+            <span class="range">区间 <input type="number" id="start-fo" min="0" step="0.1" value="0"> – <input type="number" id="end-fo" min="0" step="0.1"> 秒</span>
+            <label for="file-fo" class="link">更换</label>
+            <button type="button" class="link-btn" data-clear="fo">移除</button>
+          </div>
+        </div>
+        <div class="slot" data-view="dtl">
+          <div class="slot-head"><b>侧面（Down-the-line）</b><span class="muted small">相机在身后，对准目标线</span></div>
+          <label class="drop" for="file-dtl" id="drop-dtl">
+            <video id="video-dtl" playsinline muted preload="auto"></video>
+            <span class="drop-hint"><strong>＋ 选择侧面视频</strong><span>看脊柱角、提前伸展、转髋、平面</span></span>
+          </label>
+          <input type="file" id="file-dtl" accept="video/*" hidden>
+          <div class="slot-foot" id="foot-dtl" hidden>
+            <span class="range">区间 <input type="number" id="start-dtl" min="0" step="0.1" value="0"> – <input type="number" id="end-dtl" min="0" step="0.1"> 秒</span>
+            <label for="file-dtl" class="link">更换</label>
+            <button type="button" class="link-btn" data-clear="dtl">移除</button>
+          </div>
         </div>
       </div>
+      <p class="muted small slot-tip">只有一个角度也可以分析；正面 + 侧面一起上传，结果最完整（两段可以是不同的挥杆）。全身入镜，3–10 秒，最好 60fps 以上。</p>
 
       <div class="settings">
         <label>惯用手
@@ -39,17 +60,11 @@
         <label>球杆
           <select id="club"><option value="iron">铁杆</option><option value="driver">一号木</option></select>
         </label>
-        <label>拍摄角度
-          <select id="view"><option value="auto">自动识别</option><option value="fo">正面（Face-on）</option><option value="dtl">侧面（Down-the-line）</option></select>
-        </label>
         <label>采样帧率
           <select id="fps"><option value="30">30 fps（较快）</option><option value="60" selected>60 fps（节奏更准）</option></select>
         </label>
         <label>识别模型
           <select id="model"><option value="full">标准</option><option value="heavy">高精度（较慢）</option></select>
-        </label>
-        <label>分析区间（秒）
-          <span class="range"><input type="number" id="start" min="0" step="0.1" value="0"> – <input type="number" id="end" min="0" step="0.1"></span>
         </label>
       </div>
 
@@ -79,6 +94,7 @@
         </div>
         <div class="facts" id="facts"></div>
         <div class="counts" id="counts"></div>
+        <div class="summary-actions"><button id="newAnalysis">↺ 分析新视频</button></div>
       </div>
 
       <div class="panel">
@@ -103,10 +119,11 @@
       <div class="grid2">
         <div class="panel">
           <h2>手部轨迹 <small>蓝 = 上杆，红 = 下杆，绿色虚线 = 职业模板</small></h2>
-          <canvas id="pathCanvas" width="560" height="560"></canvas>
+          <div class="paths" id="paths"></div>
         </div>
         <div class="panel">
           <h2>校正关键位置 <small>自动识别不准时，拖动选帧后设置</small></h2>
+          <select id="scrubView" hidden></select>
           <canvas id="scrubCanvas" width="560" height="420"></canvas>
           <input type="range" id="scrub" min="0" value="0">
           <canvas id="timeline" width="560" height="90"></canvas>

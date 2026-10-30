@@ -126,8 +126,8 @@ export async function drawFrame(canvas, source, frame, crop, { template, showTem
 }
 
 // 手部轨迹：上杆蓝、下杆红，叠加职业模板轨迹（绿色虚线）
-export async function drawHandPath(canvas, source, frames, P, crop, { handed, templatePath } = {}) {
-  const toPx = await drawFrame(canvas, source, frames[P.P1], crop, { label: '手部轨迹' });
+export async function drawHandPath(canvas, source, frames, P, crop, { handed, templatePath, label = '手部轨迹' } = {}) {
+  const toPx = await drawFrame(canvas, source, frames[P.P1], crop, { label });
   const ctx = canvas.getContext('2d');
   const path = (from, to, color) => {
     ctx.save();

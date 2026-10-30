@@ -35,10 +35,10 @@ def test_prepare_writes_images_and_task(tmp_path):
     data, work = tmp_path / "data", tmp_path / "work"
     write_request(data)
     task.prepare(data, RID, work)
-    assert (work / "01_P1.jpg").read_bytes() == JPEG_BYTES
-    assert (work / "02_P7.jpg").exists()
+    assert (work / "01_x_P1.jpg").read_bytes() == JPEG_BYTES
+    assert (work / "02_x_P7.jpg").exists()
     text = (work / "task.md").read_text(encoding="utf-8")
-    assert str((work / "01_P1.jpg").resolve()) in text
+    assert str((work / "01_x_P1.jpg").resolve()) in text
     assert str((work / "review.md").resolve()) in text
     assert "击球时骨盆前移" in text and "经常打右曲" in text
     assert "只有骨架" in text
@@ -79,3 +79,13 @@ def test_finish_and_prune(tmp_path):
     assert task.prune(data) == [RID]
     assert not (data / "requests" / f"{RID}.json").exists()
     assert (data / "requests" / "20261030120500-pend01.json").exists()
+
+
+def test_prepare_two_views(tmp_path):
+    data, work = tmp_path / "data", tmp_path / "work"
+    write_request(data, images=[{"pos": "P1", "view": "fo", "data": JPEG}, {"pos": "P1", "view": "dtl", "data": JPEG}],
+                  settings={"view": "both", "views": ["fo", "dtl"]})
+    task.prepare(data, RID, work)
+    assert (work / "01_fo_P1.jpg").exists() and (work / "02_dtl_P1.jpg").exists()
+    text = (work / "task.md").read_text(encoding="utf-8")
+    assert "正面 P1" in text and "侧面 P1" in text and "正面 + 侧面" in text

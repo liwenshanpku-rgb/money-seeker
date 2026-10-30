@@ -29,6 +29,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
@@ -52,24 +53,35 @@ h2 small { font-size: 12.5px; font-weight: 400; color: var(--muted); }
 }
 canvas { width: 100%; height: auto; display: block; border-radius: 10px; background: #0d1512; }
 
+.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.slot { display: grid; gap: 8px; align-content: start; }
+.slot-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .drop {
   position: relative;
   border: 2px dashed var(--line);
   border-radius: 12px;
-  min-height: 200px;
+  min-height: 170px;
   display: grid;
   place-items: center;
   cursor: pointer;
   overflow: hidden;
   background: var(--accent-soft);
 }
+.drop.over { border-color: var(--accent); }
 .drop.has-video { border-style: solid; background: #000; }
-.drop video { max-width: 100%; max-height: 420px; display: none; }
+.drop video { max-width: 100%; max-height: 360px; display: none; pointer-events: none; }
 .drop.has-video video { display: block; }
 .drop.has-video .drop-hint { display: none; }
 .drop-hint { text-align: center; display: grid; gap: 4px; padding: 20px; }
 .drop-hint span { color: var(--muted); font-size: 13px; }
-
+.slot-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.slot-foot .range input { width: 64px; padding: 4px 6px; }
+.link-btn { border: none; background: none; padding: 0; color: var(--bad); font-size: 13px; }
+.slot-tip { margin: 10px 0 0; }
+.summary-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.paths { display: grid; gap: 10px; }
+#scrubView { margin-bottom: 8px; width: auto; }
+.tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); margin-right: 4px; white-space: nowrap; }
 .settings {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -141,7 +153,8 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .positions { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .pos-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
 .pos-card .imgs { display: grid; grid-template-columns: 1fr; }
-.pos-card .imgs.with-pro { grid-template-columns: 1fr 1fr; }
+.pos-card .imgs.n2 { grid-template-columns: 1fr 1fr; }
+.pos-card .imgs.n3 { grid-template-columns: 1fr 1fr 1fr; }
 .pos-card canvas { border-radius: 0; }
 .pos-card .body { padding: 10px 12px; }
 .pos-card h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; gap: 6px; }
@@ -186,6 +199,9 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
 @media (max-width: 760px) {
   .grid2 { grid-template-columns: 1fr; }
   .summary { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .slots { grid-template-columns: 1fr; }
+  .summary-actions { justify-content: center; }
   h1 { font-size: 23px; }
   h1 span { display: block; margin: 4px 0 0; }
 }
+.positions.multi { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }

@@ -70,7 +70,7 @@
 
       <div class="actions">
         <button class="primary" id="analyze" disabled>开始分析</button>
-        <button id="demo">用示例挥杆体验</button>
+        <button id="demo">没有视频？先看示例</button>
       </div>
 
       <div class="progress" id="progress" hidden>
@@ -81,6 +81,10 @@
     </section>
 
     <section id="results" hidden>
+      <div class="demo-banner" id="demoBanner" hidden>
+        <span>正在查看<b>示例数据</b>（程序合成的挥杆，只有骨架，没有真实画面）</span>
+        <button id="exitDemo">退出示例</button>
+      </div>
       <div class="summary panel">
         <div class="score">
           <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="ring" id="ring"/></svg>

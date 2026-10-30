@@ -8,7 +8,7 @@ import {
   alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, videoSource, blankSource,
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
-import { buildShareText, montage, canvasToBlob, copyText } from './share.js';
+import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
@@ -164,6 +164,7 @@ async function renderAll() {
   $('coach').disabled = false;
   $('prepareShare').disabled = false;
   $('sharePanel').hidden = true;
+  $('cardPanel').hidden = true;
   u.crop = cropBox(POSITIONS.map((p) => u.frames[u.P[p]].lm).concat(
     POSITIONS.map((p) => alignTemplate(p, u.ref, opts(u)).landmarks)), u.aspect);
   if (state.pro) state.pro.crop = cropBox(POSITIONS.map((p) => state.pro.frames[state.pro.P[p]].lm), state.pro.aspect);
@@ -336,14 +337,14 @@ function coachClient() {
 }
 
 // 关键帧：withVideo 为 false 时只画骨架（不含视频画面）
-async function keyframeCanvases(u, withVideo, { width = 480, height = 560 } = {}) {
+async function keyframeCanvases(u, withVideo, { width = 480, height = 560, labelSize = 15 } = {}) {
   const source = withVideo ? u.source : blankSource();
   const out = [];
   for (const pos of POSITIONS) {
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
     await drawFrame(canvas, source, u.frames[u.P[pos]], u.crop, {
-      template: alignTemplate(pos, u.ref, opts(u)), label: `${pos} ${POSITION_INFO[pos].name}`,
+      template: alignTemplate(pos, u.ref, opts(u)), label: `${pos} ${POSITION_INFO[pos].name}`, labelSize,
     });
     out.push(canvas);
   }
@@ -369,6 +370,57 @@ function coachData(u, withVideo) {
   };
 }
 
+// ---------- 分享给朋友：结果卡片 ----------
+const card = { file: null, url: null };
+
+$('makeCard').addEventListener('click', async () => {
+  const u = state.user;
+  if (!u) return;
+  $('makeCard').disabled = true;
+  try {
+    const withVideo = $('cardFrames').checked && !u.demo;
+    const tempo = u.results.find((r) => r.id === 'tempo');
+    const canvas = resultCard({
+      score: u.summary.score,
+      counts: u.summary.counts,
+      facts: [
+        ['拍摄角度', u.view === 'fo' ? '正面' : '侧面'],
+        ['球杆', `${CLUB_TEXT[u.settings.club]} · ${u.settings.handed === 'left' ? '左手' : '右手'}`],
+        ['节奏 上杆:下杆', tempo && Number.isFinite(tempo.value) ? `${tempo.value.toFixed(1)} : 1（职业约 3:1）` : '—'],
+      ],
+      priorities: u.summary.priorities.map((r) => ({
+        status: r.status,
+        title: `${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}`,
+        detail: `${r.metric.name}：${formatValue(r.metric, r.value)}，职业区间 ${fmtRange(r)}`,
+        fix: r.advice.fix,
+      })),
+      frames: await keyframeCanvases(u, withVideo, { width: 360, height: 420, labelSize: 30 }),
+      footer: `${u.demo ? '示例数据 · ' : ''}挥杆教练 P1–P10 分析 · ${location.host}${location.pathname}`,
+    });
+    const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
+    if (card.url) URL.revokeObjectURL(card.url);
+    card.url = URL.createObjectURL(blob);
+    card.file = new File([blob], 'swing-result.jpg', { type: 'image/jpeg' });
+    $('cardImg').src = card.url;
+    $('saveCard').href = card.url;
+    $('shareCard').hidden = !(navigator.canShare && navigator.canShare({ files: [card.file] }));
+    $('cardPanel').hidden = false;
+    $('cardPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    showError(`生成卡片失败：${err.message || err}`);
+  } finally {
+    $('makeCard').disabled = false;
+  }
+});
+
+// 只分享图片：微信等应用在图文一起分享时常常丢掉文字或图片
+$('shareCard').addEventListener('click', () => {
+  if (!card.file) return;
+  navigator.share({ files: [card.file] }).catch((err) => {
+    if (err.name !== 'AbortError') $('cardStatus').textContent = `分享失败：${err.message}，请用「保存图片」后再发送。`;
+  });
+});
+
 // ---------- 方式一：发给 Claude App ----------
 let coachPrompt = null;
 const share = { text: '', file: null, url: null };
@@ -381,7 +433,7 @@ $('prepareShare').addEventListener('click', async () => {
   try {
     coachPrompt ||= await fetch('coach-prompt.md').then((r) => { if (!r.ok) throw new Error('读取提示词失败'); return r.text(); });
     const withVideo = $('shareFrames').checked && !u.demo;
-    const big = montage(await keyframeCanvases(u, withVideo, { width: 360, height: 420 }));
+    const big = montage(await keyframeCanvases(u, withVideo, { width: 360, height: 420, labelSize: 22 }));
     const blob = await canvasToBlob(big);
     if (share.url) URL.revokeObjectURL(share.url);
     share.url = URL.createObjectURL(blob);

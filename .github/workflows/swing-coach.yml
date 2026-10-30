@@ -1,0 +1,103 @@
+# 挥杆教练 AI 点评：网页把请求推到 swing-coach 分支后触发本工作流，
+# 用 Claude Code（订阅额度，非 API 计费）查看关键帧并写回点评。
+# 需要在仓库 Settings → Secrets and variables → Actions 中添加 CLAUDE_CODE_OAUTH_TOKEN
+# （在装了 Claude Code 的电脑上运行 `claude setup-token` 获得）。
+# repository_dispatch 只会运行默认分支（main）上的工作流。
+name: Swing coach review
+
+on:
+  repository_dispatch:
+    types: [swing-coach]
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "请求编号（留空则处理所有未完成的请求）"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: swing-coach
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check token
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::缺少 CLAUDE_CODE_OAUTH_TOKEN：在电脑上运行 claude setup-token，把结果添加到 Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+      - name: Load data branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin swing-coach
+          git worktree add --detach data FETCH_HEAD
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Review pending requests
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          REQUEST_ID: ${{ github.event.client_payload.id || inputs.id }}
+        run: |
+          mkdir -p out work
+          if [ -n "$REQUEST_ID" ]; then
+            ids="$REQUEST_ID"
+          else
+            ids=$(ls data/requests/*.json 2>/dev/null | xargs -rn1 basename | sed 's/\.json$//')
+          fi
+          for id in $ids; do
+            if [ -e "data/reviews/$id.md" ] || [ ! -e "data/requests/$id.json" ]; then continue; fi
+            echo "::group::$id"
+            if ! python swing_coach/coach_task.py prepare data "$id" "work/$id"; then
+              python swing_coach/coach_task.py fail out "$id" "请求格式不正确，无法处理。"
+              echo "::endgroup::"; continue
+            fi
+            claude -p "$(cat "work/$id/task.md")" \
+              --allowedTools "Read,Write" --permission-mode acceptEdits --max-turns 30 \
+              > "work/$id/claude.log" 2>&1 || echo "Claude Code 退出码 $?"
+            tail -n 20 "work/$id/claude.log"
+            python swing_coach/coach_task.py finish out "$id" "work/$id" || echo "::warning::$id 没有生成点评"
+            echo "::endgroup::"
+          done
+
+      - name: Publish reviews and remove processed requests
+        run: |
+          # 把结果放到最新的 swing-coach 上，删掉已处理请求（含图片），压成单个提交强制推送，
+          # 这样关键帧不会留在公开仓库的历史里。期间网页如果又推了新请求，租约检查失败后重试。
+          for attempt in 1 2 3 4; do
+            git fetch origin swing-coach
+            base=$(git rev-parse FETCH_HEAD)
+            (cd data && git checkout -q --detach "$base" && git clean -fdq)
+            cp -r out/. data/ 2>/dev/null || true
+            python swing_coach/coach_task.py prune data
+            cd data
+            git checkout -q --orphan squashed-$attempt
+            git add -A
+            git commit -qm "Swing coach reviews $(date -u +%FT%TZ)"
+            if git push --force-with-lease=swing-coach:"$base" origin HEAD:swing-coach; then exit 0; fi
+            cd ..
+            sleep $((attempt * 3))
+          done
+          echo "::error::推送失败"
+          exit 1

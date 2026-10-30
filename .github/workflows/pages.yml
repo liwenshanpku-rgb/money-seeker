@@ -1,0 +1,33 @@
+# 把挥杆教练网页（swing_coach/web）发布到 GitHub Pages。
+# 第一次使用前：Settings → Pages → Build and deployment → Source 选择「GitHub Actions」。
+name: Deploy swing coach to Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["swing_coach/web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: swing_coach/web
+      - id: deployment
+        uses: actions/deploy-pages@v4

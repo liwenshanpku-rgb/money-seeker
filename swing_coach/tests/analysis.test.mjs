@@ -78,3 +78,18 @@ test('低可见度关键点不打分', () => {
   const head = evaluate(ctx).find((r) => r.id === 'fo_p4_head');
   assert.equal(head.status, 'na');
 });
+
+for (const view of ['fo', 'dtl']) {
+  test(`识别下杆转髋不够、肩膀抢先（${view}）`, () => {
+    const table = structuredClone(PRO_PARAMS);
+    Object.assign(table.P5, { hip: 30, shoulder: 50 });
+    Object.assign(table.P6, { hip: 12, shoulder: 12 });
+    Object.assign(table.P7, { hip: -8, shoulder: -15 });
+    const { byId } = run({ view, table, noise: 0.001 });
+    const id = (s) => `${view}_${s}`;
+    assert.equal(byId[id('p6_hipopen')].side, 'low', `p6_hipopen=${byId[id('p6_hipopen')].value}`);
+    assert.equal(byId[id('p6_sequence')].side, 'low', `p6_sequence=${byId[id('p6_sequence')].value}`);
+    const p7 = view === 'fo' ? byId.fo_p7_hipturn : byId.dtl_p7_hipopen;
+    assert.equal(p7.side, 'low', `p7=${p7.value}`);
+  });
+}

@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-MAX_IMAGES = 12
+MAX_IMAGES = 24
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 MEDIA_EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
@@ -73,15 +73,17 @@ def build_task(payload: dict, work: Path) -> str:
         if pos not in POSITION_NAMES:
             raise ValueError(f"未知位置：{pos!r}")
         ext, raw = _decode_image(img.get("data", ""))
-        path = work / f"{i + 1:02d}_{pos}.{ext}"
+        view = {"fo": "正面", "dtl": "侧面"}.get(str(img.get("view", "")), "")
+        path = work / f"{i + 1:02d}_{img.get('view') if view else 'x'}_{pos}.{ext}"
         path.write_bytes(raw)
-        frame_lines.append(f"- {pos} {POSITION_NAMES[pos]}：{path.resolve()}")
+        frame_lines.append(f"- {view + ' ' if view else ''}{pos} {POSITION_NAMES[pos]}：{path.resolve()}")
 
     s = payload.get("settings") or {}
     info = {
         "惯用手": "左手" if s.get("handed") == "left" else "右手",
         "球杆": "一号木" if s.get("club") == "driver" else "铁杆",
-        "拍摄角度": "正面（face-on）" if s.get("view") == "fo" else "侧面（down-the-line）",
+        "拍摄角度": {"fo": "正面（face-on）", "dtl": "侧面（down-the-line）"}.get(
+            s.get("view"), "正面 + 侧面（两段视频，可能是不同的挥杆）"),
         "截图内容": "只有骨架（学员选择不上传真实画面）" if s.get("skeletonOnly") else "视频画面 + 骨架",
         "综合评分": payload.get("score"),
         "各位置时间(秒)": payload.get("timing"),

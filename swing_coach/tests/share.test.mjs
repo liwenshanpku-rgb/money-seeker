@@ -31,3 +31,15 @@ test('中文按宽度逐字折行', async () => {
   assert.deepEqual(wrapText(ctx, '一二三四五六七', 30), ['一二三', '四五六', '七']);
   assert.deepEqual(wrapText(ctx, '一二\n三', 100), ['一二', '三']);
 });
+
+test('两个角度时分享文字标出视角和各自时间', () => {
+  const text = buildShareText(prompt, {
+    settings: { handed: 'right', club: 'iron', view: 'both' },
+    score: 70,
+    timing: { 正面: { P1: 0.3 }, 侧面: { P1: 0.5 } },
+    metrics: [{ view: '侧面', pos: 'P6', name: '下杆髋部打开（估算）', value: '-5 °', pro_range: '5 – 40 °', status: 'bad', issue: '下杆转髋不够（髋部滞后）' }],
+  });
+  assert.match(text, /正面 \+ 侧面/);
+  assert.match(text, /各位置时间（秒，侧面）：P1 0\.5/);
+  assert.match(text, /- \[侧面\] P6 下杆髋部打开/);
+});

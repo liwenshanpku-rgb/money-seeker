@@ -5,7 +5,7 @@ import { smoothFrames, detectPhases, detectView } from './phases.js';
 import { makeContext, evaluate, summarize, formatValue, compareToPro } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
-  alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource, COLORS,
+  alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource, imageSource, COLORS,
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
 import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
@@ -353,7 +353,8 @@ async function renderPositions() {
     if (pro?.views[a.view]) panes.push({ a: pro.views[a.view], pro: true, mirror: pro.views[a.view].dir !== a.dir });
   }
   box.classList.toggle('multi', panes.length > 1);
-  $('proLegend').textContent = pro ? `　·　每组右边绿色骨架是 ${pro.name} 的同一位置` : '';
+  const credit = pro && Object.values(pro.views).map((a) => a.credit).find(Boolean);
+  $('proLegend').textContent = pro ? `　·　每组右边是 ${pro.name} 的同一位置（绿色骨架）${credit ? `，${credit}` : ''}` : '';
   for (const pos of POSITIONS) {
     const card = document.createElement('div');
     card.className = 'pos-card';
@@ -371,7 +372,7 @@ async function renderPositions() {
     for (let i = 0; i < panes.length; i++) {
       const { a, pro: isPro, mirror } = panes[i];
       if (isPro) {
-        await drawFrame(canvases[i], a.source, mirrorFrame(a.frames[a.P[pos]], a.crop, mirror), a.crop, {
+        await drawFrame(canvases[i], mirror ? a.sourceMirror : a.source, mirrorFrame(a.frames[a.P[pos]], a.crop, mirror), a.crop, {
           label: `${state.pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
           color: COLORS.pro, joint: '#c9f5df',
         });
@@ -412,9 +413,17 @@ async function loadSelectedPro() {
     const a = analyzeFrames(d.frames, { handed: d.handed, club: d.club, view: v }, { aspect: d.aspect, pro: true });
     a.P = { ...d.P };
     score(a);
-    const ankle = (POSITIONS.map((p) => a.frames[a.P[p]].lm)).flatMap((lm) => [lm[27].y, lm[28].y]);
-    a.source = blankSource(Math.max(...ankle) + 0.01);
     a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect);
+    if (d.images) {
+      // 有原画面：各 P 位置的截图（只在用到时下载）
+      const byTime = new Map(Object.entries(d.images).map(([pos, url]) => [a.frames[d.P[pos]].t, url]));
+      a.source = imageSource(byTime);
+      a.sourceMirror = imageSource(byTime, { mirror: true });
+      a.credit = d.imageCredit;
+    } else {
+      const ankle = (POSITIONS.map((p) => a.frames[a.P[p]].lm)).flatMap((lm) => [lm[27].y, lm[28].y]);
+      a.source = a.sourceMirror = blankSource(Math.max(...ankle) + 0.01);
+    }
     views[v] = a;
   }
   state.pro = { id: info.id, name: info.name, views };

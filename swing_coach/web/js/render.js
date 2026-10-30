@@ -218,6 +218,28 @@ export function frameSource(frames) {
   };
 }
 
+// 背景来源：按时间取图片（职业球员各 P 位置的原画面）。mirror：水平翻转，和翻转后的骨架对齐
+export function imageSource(byTime, { mirror = false } = {}) {
+  const bitmaps = new Map();
+  const load = (url) => {
+    if (!bitmaps.has(url)) bitmaps.set(url, fetch(url).then((r) => r.blob()).then((b) => createImageBitmap(b)));
+    return bitmaps.get(url);
+  };
+  return {
+    async draw(ctx, t, crop, { ox, oy, k }) {
+      let best = null, bd = Infinity;
+      for (const [tt, url] of byTime) { const d = Math.abs(tt - t); if (d < bd) { bd = d; best = url; } }
+      if (!best) return;
+      const bmp = await load(best);
+      const vh = bmp.height;
+      ctx.save();
+      if (mirror) { const cx = ox + (crop.w * k) / 2; ctx.translate(2 * cx, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(bmp, crop.x * vh, crop.y * vh, crop.w * vh, crop.h * vh, ox, oy, crop.w * k, crop.h * k);
+      ctx.restore();
+    },
+  };
+}
+
 // 背景来源：演示模式（无视频），画地面线
 export function blankSource(groundY = 0.92) {
   return {

@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-29T06:30:43+00:00",
-  "as_of_close_utc": "2026-10-28",
-  "price": 81287.1,
+  "generated_at": "2026-10-30T06:30:05+00:00",
+  "as_of_close_utc": "2026-10-29",
+  "price": 77800.0,
   "price_source": "kraken XBTUSD 1d",
   "plan_b": {
     "mode": "UP",
     "mode_since": "2026-08-20",
     "switched_today": false,
     "target_pct": 100.0,
-    "sma": 73066.04,
-    "upper": 75258.02,
-    "lower": 70874.06,
-    "distance_to_switch": -0.128102,
+    "sma": 73101.27,
+    "upper": 75294.3,
+    "lower": 70908.23,
+    "distance_to_switch": -0.088583,
     "params": {
       "core": 0.5,
       "sma_days": 200,
@@ -29,7 +29,7 @@
     "decided_at": "2026-10-26T01:16:39+00:00",
     "confidence": "low",
     "stance": "维持 85%，不加杠杆。趋势仍是上涨模式（收盘 80,154，比 200 日均线高约 9.8%），杠杆不拥挤，长期持有者也没有在亏损中抛售。但宏观偏鹰：10 月 28 日议息会议大概率按兵不动，市场押注 12 月加息；价格也略低于 ETF 成本支撑约 8 万美元。多空因素互相抵消，按规则保持接近上次的仓位。",
-    "age_days": 4,
+    "age_days": 5,
     "stale": false
   }
 }

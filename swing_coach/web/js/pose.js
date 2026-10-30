@@ -29,19 +29,57 @@ async function landmarker(model) {
   return cache[model];
 }
 
-export function seek(video, t) {
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function once(el, events, ms) {
   return new Promise((resolve) => {
-    const done = () => { video.removeEventListener('seeked', done); resolve(); };
-    video.addEventListener('seeked', done);
-    video.currentTime = t;
+    const done = () => { clearTimeout(timer); events.forEach((e) => el.removeEventListener(e, done)); resolve(); };
+    const timer = setTimeout(done, ms);
+    events.forEach((e) => el.addEventListener(e, done));
   });
+}
+
+// iPhone Safari 在视频播放过之前不会解码画面，直接跳帧会得到黑屏或卡住。
+// 需在用户点击的同一事件里调用（不能先 await 别的东西），播一下再暂停，让浏览器把视频数据加载进来。
+export function primeVideo(video) {
+  video.muted = true;
+  video.playsInline = true;
+  const p = video.play();
+  return Promise.resolve(p).then(() => video.pause()).catch(() => {});
+}
+
+export async function ensureReady(video) {
+  if (video.readyState < 1) await once(video, ['loadedmetadata', 'error'], 8000);
+  if (video.readyState < 2) await once(video, ['loadeddata', 'canplay', 'error'], 8000);
+  if (video.readyState < 2) throw new Error('视频无法解码。iPhone 拍的 HEVC 视频在部分安卓或电脑浏览器上无法播放，请在拍摄设置里改用「兼容性最佳」（H.264）后重拍或转码');
+}
+
+// 跳到时间 t 并等这一帧真正解码出来。目标时间和当前时间相同时浏览器不会触发 seeked，需单独处理；
+// 再加超时兜底，防止个别浏览器不触发事件导致卡死。
+export async function seek(video, t) {
+  if (Math.abs(video.currentTime - t) > 1e-4) {
+    const done = once(video, ['seeked'], 3000);
+    video.currentTime = t;
+    await done;
+  }
+  if (video.readyState < 2) await once(video, ['loadeddata', 'canplay'], 1500);
+  if ('requestVideoFrameCallback' in video && video.paused) {
+    // Safari / Chrome 暂停状态下跳帧后会回调一次；没有回调也最多等 80ms
+    await Promise.race([new Promise((r) => video.requestVideoFrameCallback(() => r())), wait(80)]);
+  }
+}
+
+// 视频时长：MediaRecorder 等录出的文件 duration 可能是 Infinity
+export function videoDuration(video, fallback = 15) {
+  return Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallback;
 }
 
 // 逐帧提取关键点。返回 [{t, lm: [{x, y, v}]}]，x 已乘宽高比（单位 = 视频高度）
 export async function extractPoses(video, { fps = 30, start = 0, end, model = 'full', onProgress } = {}) {
+  await ensureReady(video);
   const pl = await landmarker(model);
   const aspect = video.videoWidth / video.videoHeight;
-  const stop = Math.min(end ?? video.duration, video.duration);
+  const stop = Math.min(end ?? videoDuration(video), videoDuration(video));
   const frames = [];
   const total = Math.max(1, Math.floor((stop - start) * fps));
   let ts = (performance.now() | 0) + 1;

@@ -111,13 +111,24 @@
         <div class="table-wrap"><table class="metrics" id="metricsTable"></table></div>
       </div>
 
-      <div class="panel" id="coachPanel">
-        <h2>AI 教练点评</h2>
-        <p class="muted">把 10 张关键帧和上面的测量数据交给 Claude，让它像教练一样看图点评、给出训练计划。需要用 <code>server.py</code> 启动本工具并配置 <code>ANTHROPIC_API_KEY</code>。</p>
-        <textarea id="coachNote" rows="2" placeholder="可选：补充你的情况，例如「经常打右曲」「差点 18」"></textarea>
-        <button class="primary" id="coach">生成 AI 点评</button>
-        <div class="coach" id="coachOut"></div>
+    </section>
+
+    <section class="panel" id="coachPanel">
+      <h2>AI 教练点评 <small>用你的 Claude 订阅额度，不走 API 计费</small></h2>
+      <p class="muted">把 10 张关键帧和测量数据推送到 GitHub 仓库的 <code>swing-coach</code> 分支，由 GitHub Actions 里的 Claude Code 写出点评，通常 2–5 分钟。先完成上面的分析，再生成点评。可以先关掉页面，稍后回来点「查看上次点评」。</p>
+      <details class="gh-setup" id="ghSetup">
+        <summary>GitHub 设置（只需一次）</summary>
+        <label>仓库（owner/repo）<input type="text" id="ghRepo" placeholder="例如 yourname/money-seeker" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+        <label>GitHub token <input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
+        <p class="muted small">在 GitHub → Settings → Developer settings → Fine-grained tokens 新建，只选这个仓库，权限 Contents 选 Read and write。token 只保存在这台设备的浏览器里。</p>
+      </details>
+      <label class="check"><input type="checkbox" id="sendFrames"> 上传真实视频画面（默认只上传骨架图；仓库公开时，处理期间画面对外可见，完成后会自动删除）</label>
+      <textarea id="coachNote" rows="2" placeholder="可选：补充你的情况，例如「经常打右曲」「差点 18」"></textarea>
+      <div class="actions">
+        <button class="primary" id="coach" disabled>生成 AI 点评</button>
+        <button id="coachLast" hidden>查看上次点评</button>
       </div>
+      <div class="coach" id="coachOut"></div>
     </section>
 
     <section class="panel tips">

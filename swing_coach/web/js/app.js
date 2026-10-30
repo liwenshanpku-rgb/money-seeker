@@ -1,12 +1,13 @@
 // 页面逻辑：上传 → 姿态识别 → P1–P10 检测 → 指标评估 → 渲染对比结果 →（可选）AI 教练点评
 
-import { extractPoses, fillMissing } from './pose.js';
+import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases } from './phases.js';
 import { makeContext, evaluate, summarize, formatValue } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
   alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, videoSource, blankSource,
 } from './render.js';
+import { GitHubCoach, guessRepo, store } from './github.js';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
@@ -14,6 +15,10 @@ const VIEW_TEXT = { fo: '正面（Face-on）', dtl: '侧面（Down-the-line）' 
 const CLUB_TEXT = { iron: '铁杆', driver: '一号木' };
 
 const state = { user: null, pro: null, videoURL: null, proURL: null };
+
+// 手机上逐帧识别较慢，默认 30fps
+const isPhone = window.matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
+if (isPhone) $('fps').value = '30';
 
 function settings() {
   return {
@@ -45,12 +50,13 @@ function loadVideo(file) {
   state.videoURL = URL.createObjectURL(file);
   const v = $('video');
   v.src = state.videoURL;
+  v.load();
   v.onloadedmetadata = () => {
     drop.classList.add('has-video');
     $('start').value = 0;
-    $('end').value = Math.min(v.duration, 15).toFixed(1);
+    $('end').value = Math.min(videoDuration(v), 15).toFixed(1);
     $('analyze').disabled = false;
-    if (v.duration > 15) showError('视频超过 15 秒，默认只分析前 15 秒；可以调整「分析区间」只包含一次挥杆。');
+    if (videoDuration(v) > 15) showError('视频超过 15 秒，默认只分析前 15 秒；可以调整「分析区间」只包含一次挥杆。');
     else hideError();
   };
 }
@@ -62,11 +68,14 @@ $('proFile').addEventListener('change', async (e) => {
   state.proURL = URL.createObjectURL(file);
   const v = $('proVideo');
   v.src = state.proURL;
-  await new Promise((r) => { v.onloadedmetadata = r; });
+  v.load();
+  const primed = primeVideo(v);
+  await new Promise((r) => { if (v.readyState >= 1) r(); else v.onloadedmetadata = r; });
+  await primed;
   $('proStatus').textContent = `已选择：${file.name}，分析时会一并处理`;
   if (state.user && !state.user.demo) {
     try {
-      state.pro = await analyzeVideo(v, { ...settings(), start: 0, end: Math.min(v.duration, 15) }, '职业视频');
+      state.pro = await analyzeVideo(v, { ...settings(), start: 0, end: Math.min(videoDuration(v), 15) }, '职业视频');
       await renderAll();
     } catch (err) { showError(`职业视频分析失败：${err.message}`); }
   }
@@ -105,15 +114,18 @@ async function analyzeVideo(video, s, label = '') {
 }
 
 $('analyze').addEventListener('click', async () => {
+  // 必须在点击事件里同步调用（iPhone 要求播放由用户手势触发）
+  const primed = [primeVideo($('video')), $('proVideo').src ? primeVideo($('proVideo')) : null];
   hideError();
   $('analyze').disabled = true;
   try {
+    await Promise.all(primed);
     const s = settings();
     state.user = await analyzeVideo($('video'), s);
     state.pro = null;
     if ($('proVideo').src) {
       const pv = $('proVideo');
-      state.pro = await analyzeVideo(pv, { ...s, view: state.user.view, start: 0, end: Math.min(pv.duration, 15) }, '职业视频：');
+      state.pro = await analyzeVideo(pv, { ...s, view: state.user.view, start: 0, end: Math.min(videoDuration(pv), 15) }, '职业视频：');
     }
     setProgress(1, '完成');
     await renderAll();
@@ -148,6 +160,7 @@ $('demo').addEventListener('click', async () => {
 async function renderAll() {
   const u = state.user;
   $('results').hidden = false;
+  $('coach').disabled = false;
   u.crop = cropBox(POSITIONS.map((p) => u.frames[u.P[p]].lm).concat(
     POSITIONS.map((p) => alignTemplate(p, u.ref, opts(u)).landmarks)), u.aspect);
   if (state.pro) state.pro.crop = cropBox(POSITIONS.map((p) => state.pro.frames[state.pro.P[p]].lm), state.pro.aspect);
@@ -305,20 +318,57 @@ async function rescore() {
   drawScrub();
 }
 
-// ---------- AI 教练 ----------
+// ---------- AI 教练（GitHub Actions + Claude Code，订阅额度） ----------
+const KEY_REPO = 'swingCoach.repo', KEY_TOKEN = 'swingCoach.token', KEY_LAST = 'swingCoach.lastRequest';
+$('ghRepo').value = store.get(KEY_REPO) || guessRepo();
+$('ghToken').value = store.get(KEY_TOKEN) || '';
+if (!$('ghToken').value) $('ghSetup').open = true;
+$('ghRepo').addEventListener('change', () => store.set(KEY_REPO, $('ghRepo').value.trim()));
+$('ghToken').addEventListener('change', () => store.set(KEY_TOKEN, $('ghToken').value.trim()));
+$('coachLast').hidden = !store.get(KEY_LAST);
+
+function coachClient() {
+  return new GitHubCoach($('ghRepo').value.trim(), $('ghToken').value.trim());
+}
+
+// 关键帧图片：默认只画骨架（不含视频画面），勾选后才带上真实画面
+async function keyframeImages(u, withVideo) {
+  const out = [];
+  const canvas = document.createElement('canvas');
+  canvas.width = 480; canvas.height = 560;
+  const source = withVideo ? u.source : blankSource();
+  for (const pos of POSITIONS) {
+    await drawFrame(canvas, source, u.frames[u.P[pos]], u.crop, {
+      template: alignTemplate(pos, u.ref, opts(u)), label: `${pos} ${POSITION_INFO[pos].name}`,
+    });
+    out.push({ pos, data: canvas.toDataURL('image/jpeg', 0.8) });
+  }
+  return out;
+}
+
+async function waitAndShow(gh, id) {
+  const out = $('coachOut');
+  const r = await gh.waitFor(id, {
+    onTick: (s) => { out.innerHTML = `<p class="muted">已提交（编号 ${id}），Claude 正在看你的关键帧… 已等待 ${s} 秒。可以先离开页面，稍后点「查看上次点评」。</p>`; },
+  });
+  if (r.text) out.innerHTML = markdown(r.text);
+  else if (r.error) out.innerHTML = `<p class="error">${escapeHTML(r.error)}</p>`;
+  else out.innerHTML = '<p class="error">等待超时。请到仓库的 Actions 页面查看 Swing coach review 是否运行成功，稍后再点「查看上次点评」。</p>';
+}
+
 $('coach').addEventListener('click', async () => {
   const u = state.user;
   if (!u) return;
   const out = $('coachOut');
   $('coach').disabled = true;
-  out.innerHTML = '<p class="muted">Claude 正在看你的 10 张关键帧并撰写点评，通常需要 30–90 秒…</p>';
   try {
-    const images = [...document.querySelectorAll('.pos-card')].map((card) => ({
-      pos: card.dataset.pos,
-      data: card.querySelector('canvas').toDataURL('image/jpeg', 0.82),
-    }));
+    const gh = coachClient();
+    store.set(KEY_REPO, gh.repo);
+    store.set(KEY_TOKEN, gh.token);
+    out.innerHTML = '<p class="muted">正在生成关键帧并提交…</p>';
+    const withVideo = $('sendFrames').checked && !u.demo;
     const payload = {
-      settings: { handed: u.settings.handed, club: u.settings.club, view: u.view, demo: !!u.demo },
+      settings: { handed: u.settings.handed, club: u.settings.club, view: u.view, demo: !!u.demo, skeletonOnly: !withVideo },
       note: $('coachNote').value.trim(),
       score: u.summary.score,
       timing: Object.fromEntries(POSITIONS.map((p) => [p, Number(u.frames[u.P[p]].t.toFixed(3))])),
@@ -326,20 +376,23 @@ $('coach').addEventListener('click', async () => {
         pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
         status: r.status, issue: r.advice?.issue ?? null, pro_value: proValue(r.id),
       })),
-      images,
+      images: await keyframeImages(u, withVideo),
     };
-    const res = await fetch('api/coach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (res.status === 404 || res.status === 405 || res.status === 501) {
-      throw new Error('当前页面不是通过 server.py 启动的，无法调用 AI 教练。请运行 python swing_coach/server.py 后打开 http://localhost:8000');
-    }
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `服务器错误 ${res.status}`);
-    out.innerHTML = markdown(data.text);
+    const id = await gh.submit(payload);
+    store.set(KEY_LAST, id);
+    $('coachLast').hidden = false;
+    await waitAndShow(gh, id);
   } catch (err) {
-    out.innerHTML = `<p class="error">${escapeHTML(err.message)}</p>`;
+    out.innerHTML = `<p class="error">${escapeHTML(err.message || String(err))}</p>`;
   } finally {
     $('coach').disabled = false;
   }
+});
+
+$('coachLast').addEventListener('click', async () => {
+  const id = store.get(KEY_LAST);
+  if (!id) return;
+  try { await waitAndShow(coachClient(), id); } catch (err) { $('coachOut').innerHTML = `<p class="error">${escapeHTML(err.message)}</p>`; }
 });
 
 function escapeHTML(s) {
@@ -354,7 +407,7 @@ function markdown(src) {
   const close = () => { if (list) { html += `</${list}>`; list = null; } };
   for (const line of lines) {
     let m;
-    if ((m = line.match(/^(#{1,4})\s+(.*)/))) { close(); const h = Math.min(4, m[1].length + 2); html += `<h${h}>${inline(m[2])}</h${h}>`; }
+    if ((m = line.match(/^(#{1,4})\s+(.*)/))) { close(); const h = Math.min(4, m[1].length + 1); html += `<h${h}>${inline(m[2])}</h${h}>`; }
     else if ((m = line.match(/^\s*[-*]\s+(.*)/))) { if (list !== 'ul') { close(); html += '<ul>'; list = 'ul'; } html += `<li>${inline(m[1])}</li>`; }
     else if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== 'ol') { close(); html += '<ol>'; list = 'ol'; } html += `<li>${inline(m[1])}</li>`; }
     else if (line.trim() === '') close();

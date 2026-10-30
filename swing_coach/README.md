@@ -13,27 +13,33 @@
   - 两种视角都有：节奏（上杆和下杆用时之比，职业约 3 : 1）。
 
   每项都给出职业区间、问题诊断、改进要领和具体练习，并自动列出最需要改进的 3 点。
-- **AI 教练点评（可选）**：把 10 张关键帧和测量数据发给 Claude，生成总体评价、逐位置点评、优先改进点和两周练习计划。
+- **AI 教练点评（可选，用 Claude 订阅额度）**：网页把 10 张关键帧和测量数据推到仓库的 `swing-coach` 分支，GitHub Actions 里的 Claude Code 生成总体评价、逐位置点评、优先改进点和两周练习计划，再写回分支，网页自动取回显示。不走 API 计费。
 
-## 使用
+## 部署与使用
 
-纯静态页面，只用规则分析，不需要后端：
+### 1. 发布网页（GitHub Pages）
+
+1. 把本分支合并到 `main`。
+2. 仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。
+3. `.github/workflows/pages.yml` 会把 `swing_coach/web/` 发布到 `https://<用户名>.github.io/<仓库名>/`，之后每次改动网页都会自动更新。
+
+手机浏览器打开这个地址即可上传视频分析。姿态识别和全部规则分析都在手机浏览器里完成，视频不会上传。
+
+### 2. 开启 AI 点评（可选，只需一次）
+
+1. 在装了 Claude Code 的电脑上运行 `claude setup-token`，把生成的 token 添加到仓库 **Settings → Secrets and variables → Actions**，名称为 `CLAUDE_CODE_OAUTH_TOKEN`。这样使用的是你 Claude 订阅里的额度。
+2. 在 GitHub **Settings → Developer settings → Fine-grained tokens** 新建一个 token：只选这个仓库，权限 **Contents** 选 **Read and write**。在网页的「GitHub 设置」里填入。这个 token 只保存在该设备的浏览器里。
+3. 分析完成后点「生成 AI 点评」，通常 2–5 分钟出结果。可以先关掉页面，稍后回来点「查看上次点评」。
+
+流程：网页把请求写到 `swing-coach` 分支的 `requests/<编号>.json`，并触发 `.github/workflows/swing-coach.yml`。工作流运行 `swing_coach/coach_task.py` 解出图片、生成任务说明，再用 `claude -p` 查看关键帧并写出点评。结果存到 `reviews/<编号>.md`。
+
+隐私：仓库是公开的，所以默认只上传骨架图，不含视频画面。勾选「上传真实视频画面」后，画面在处理的几分钟内对外可见。每次处理完，工作流会删除已完成的请求，并把 `swing-coach` 分支压成单个提交强制推送，图片不会留在分支历史里。
+
+### 本地运行
 
 ```bash
-cd swing_coach/web && python -m http.server 8000
+cd swing_coach/web && python -m http.server 8000   # 打开 http://localhost:8000
 ```
-
-需要 AI 点评时，改用自带的服务（同时提供静态页面和 `/api/coach` 接口）：
-
-```bash
-pip install -r swing_coach/requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...
-python swing_coach/server.py   # 打开 http://localhost:8000
-```
-
-可以用环境变量 `SWING_COACH_MODEL` 改模型（默认 `claude-opus-5-5`）。
-
-`web/` 目录可以直接部署到 GitHub Pages 或任何静态托管。部署到公网时，`server.py` 应放在有访问控制的反向代理后面，避免 API 额度被他人消耗。
 
 ## 拍摄建议
 
@@ -52,7 +58,8 @@ web/js/metrics.js    检查项定义、职业区间、诊断与练习、评分
 web/js/pose.js       MediaPipe 逐帧提取
 web/js/render.js     关键帧、模板叠加、手部轨迹、时间轴
 web/js/app.js        页面逻辑
-server.py            静态服务 + Claude 教练接口
+web/js/github.js     推送 AI 点评请求、取回结果
+coach_task.py        Actions 中把请求整理成 Claude Code 任务
 tests/               node --test 单元测试（用合成挥杆验证相位检测和指标）
 ```
 
@@ -60,5 +67,5 @@ tests/               node --test 单元测试（用合成挥杆验证相位检�
 
 ```bash
 node --test swing_coach/tests/*.test.mjs
-python -m pytest tests/test_swing_coach_server.py
+python -m pytest tests/test_swing_coach_task.py
 ```

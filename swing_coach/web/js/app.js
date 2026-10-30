@@ -9,7 +9,7 @@ import {
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
 import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
-import { PROS, embedURL, loadProFrames } from './pros.js';
+import { PROS, embedURL, loadProFrames, pickProData, CLUB_NAME } from './pros.js';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断', ref: '参考' };
@@ -218,10 +218,13 @@ $('exitDemo').addEventListener('click', async () => {
 });
 
 // ---------- 渲染 ----------
+let renderRun = 0;
 async function renderAll({ scroll = true } = {}) {
+  const run = ++renderRun;
   const list = analyses();
   if (!list.length) return;
   await loadSelectedPro();
+  if (run !== renderRun) return;
   $('results').hidden = false;
   $('demoBanner').hidden = !isDemo();
   $('coach').disabled = false;
@@ -244,6 +247,7 @@ async function renderAll({ scroll = true } = {}) {
   const paths = $('paths');
   paths.innerHTML = '';
   for (const a of list) {
+    if (run !== renderRun) return;
     const c = document.createElement('canvas');
     c.width = 560; c.height = 560;
     paths.appendChild(c);
@@ -339,7 +343,10 @@ function renderTable() {
 }
 $('onlyIssues').addEventListener('change', () => analyses().length && renderTable());
 
+let positionsRun = 0;
 async function renderPositions() {
+  // 切换球员等操作会在上一次渲染还没画完时重新渲染；旧的那次发现自己过期就停下，避免往新列表里插卡片
+  const run = ++positionsRun;
   const list = analyses();
   const show = $('showTemplate').checked;
   const box = $('positions');
@@ -367,13 +374,14 @@ async function renderPositions() {
         <div class="muted" style="font-size:12.5px">${POSITION_INFO[pos].desc}</div>
         <ul>${items.map((r) => `<li><span>${viewTag(r)}${r.metric.name}</span><span>${formatValue(r.metric, r.value)} <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></span></li>`).join('')}</ul>
       </div>`;
+    if (run !== positionsRun) return;
     box.appendChild(card);
     const canvases = card.querySelectorAll('canvas');
     for (let i = 0; i < panes.length; i++) {
       const { a, pro: isPro, mirror } = panes[i];
       if (isPro) {
         await drawFrame(canvases[i], mirror ? a.sourceMirror : a.source, mirrorFrame(a.frames[a.P[pos]], a.crop, mirror), a.crop, {
-          label: `${state.pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
+          label: `${pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
           color: COLORS.pro, joint: '#c9f5df',
         });
       } else {
@@ -391,7 +399,7 @@ $('showTemplate').addEventListener('change', () => analyses().length && renderPo
 
 // ---------- 对比职业球员：骨架数据逐位置左右对比 + 原视频 ----------
 const KEY_PRO = 'swingCoach.pro';
-$('proSelect').innerHTML = '<option value="">不对比</option>' + PROS.map((p) => `<option value="${p.id}">${p.name}（${p.tour}）${p.data ? '' : ' · 仅视频'}</option>`).join('');
+$('proSelect').innerHTML = '<option value="">不对比</option>' + PROS.map((p) => `<option value="${p.id}">${p.name}（${p.tour}）${p.data ? ' · ' + Object.keys(p.data).map((c) => CLUB_NAME[c]).join(' / ') : ' · 仅视频'}</option>`).join('');
 {
   const saved = store.get(KEY_PRO);
   $('proSelect').value = saved === '' || PROS.some((p) => p.id === saved) ? saved : (PROS.find((p) => p.data) || PROS[0]).id;
@@ -404,12 +412,14 @@ $('proSelect').addEventListener('change', async () => {
 // 把职业球员的骨架数据当作一次「分析」：用数据里人工核对过的 P1–P10，指标用同一套算法
 async function loadSelectedPro() {
   const info = PROS.find((p) => p.id === $('proSelect').value);
-  if (!info?.data) { state.pro = null; return; }
-  if (state.pro?.id === info.id) return;
+  const club = analyses()[0]?.settings.club || $('club').value;
+  const pick = pickProData(info, club);
+  if (!pick) { state.pro = null; return; }
+  if (state.pro?.id === info.id && state.pro.club === pick.club) return;
   const views = {};
   for (const v of VIEWS) {
-    if (!info.data[v]) continue;
-    const d = await loadProFrames(info.data[v]);
+    if (!pick.files[v]) continue;
+    const d = await loadProFrames(pick.files[v]);
     const a = analyzeFrames(d.frames, { handed: d.handed, club: d.club, view: v }, { aspect: d.aspect, pro: true });
     a.P = { ...d.P };
     score(a);
@@ -426,7 +436,7 @@ async function loadSelectedPro() {
     }
     views[v] = a;
   }
-  state.pro = { id: info.id, name: info.name, views };
+  state.pro = { id: info.id, name: info.name, views, club: pick.club, fallback: pick.fallback };
 }
 
 // 职业球员和用户朝向不同时（左手球员、相机在另一侧）水平翻转骨架
@@ -461,9 +471,11 @@ function renderPros() {
   if (!info) return;
   const mine = analyses().map((a) => a.view);
   const order = [...VIEWS].sort((x, y) => mine.includes(y) - mine.includes(x));
-  const missing = mine.filter((v) => !info.data?.[v]);
-  $('proNote').textContent = info.note + (info.data
-    ? (missing.length ? `（暂无${missing.map((v) => VIEW_SHORT[v]).join('、')}骨架数据）` : ' 下面每个 P 位置的右边就是他的同一位置。')
+  const pick = pickProData(info, analyses()[0]?.settings.club || $('club').value);
+  const missing = pick ? mine.filter((v) => !pick.files[v]) : [];
+  $('proNote').textContent = info.note + (pick
+    ? `${pick.fallback ? `（他还没有${CLUB_NAME[analyses()[0]?.settings.club] || ''}数据，用的是${CLUB_NAME[pick.club]}挥杆）` : `（${CLUB_NAME[pick.club]}挥杆）`}`
+      + (missing.length ? `暂无${missing.map((v) => VIEW_SHORT[v]).join('、')}数据。` : ' 下面每个 P 位置的右边就是他的同一位置。')
     : ' 这位球员的骨架数据还没有，暂时只能看视频。');
   $('proVideos').innerHTML = order.filter((v) => info[v]).map((v) => `
     <div class="pro-video">

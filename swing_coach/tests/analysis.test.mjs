@@ -159,18 +159,25 @@ test('参考类指标和职业球员对比：差距小算达标，差距大给�
   assert.equal(compareToPro(r, NaN).status, 'ref');
 });
 
-test('Adam Scott 的骨架数据：P1–P10 顺序正确，主要非参考指标在职业区间内', async () => {
+test('所有职业球员骨架数据：P1–P10 顺序正确，非参考指标没有「需改进」', async () => {
   const fs = await import('node:fs');
   globalThis.fetch = async (u) => ({ ok: true, json: async () => JSON.parse(fs.readFileSync(new URL(`../web/${u}`, import.meta.url))) });
   const { loadProFrames, PROS } = await import('../web/js/pros.js');
-  const adam = PROS.find((p) => p.id === 'adam-scott');
-  for (const v of ['fo', 'dtl']) {
-    const d = await loadProFrames(adam.data[v]);
-    const order = POSITIONS.map((p) => d.P[p]);
-    assert.deepEqual([...order].sort((a, b) => a - b), order);
-    const det = detectPhases(d.frames, { view: v });
-    const results = evaluate(makeContext(det.frames, d.P, { view: v, dir: det.dir, handed: 'right', club: 'iron' }));
-    const bad = results.filter((r) => r.status === 'bad' && r.id !== 'tempo').map((r) => `${r.id}=${r.value}`);
-    assert.deepEqual(bad, [], `${v}: ${bad}`);
+  let n = 0;
+  for (const pro of PROS.filter((p) => p.data)) {
+    for (const [club, files] of Object.entries(pro.data)) {
+      for (const [v, url] of Object.entries(files)) {
+        const d = await loadProFrames(url);
+        const order = POSITIONS.map((p) => d.P[p]);
+        assert.deepEqual([...order].sort((a, b) => a - b), order, `${pro.id} ${club} ${v}`);
+        if (d.images) for (const img of Object.values(d.images)) assert.ok(fs.existsSync(new URL(`../web/${img}`, import.meta.url)), img);
+        const det = detectPhases(d.frames, { view: v });
+        const results = evaluate(makeContext(det.frames, d.P, { view: v, dir: det.dir, handed: 'right', club }));
+        const bad = results.filter((r) => r.status === 'bad' && r.id !== 'tempo').map((r) => `${r.id}=${r.value}`);
+        assert.deepEqual(bad, [], `${pro.id} ${club} ${v}: ${bad}`);
+        n++;
+      }
+    }
   }
+  assert.ok(n >= 2);
 });

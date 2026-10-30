@@ -160,6 +160,7 @@ export const METRICS = [
   },
   {
     id: 'fo_p3_leadarm', view: 'fo', pos: 'P3', name: '上杆中前臂伸直度', unit: '°', digits: 0,
+    ref: true,
     points: ['leadShoulder', 'leadElbow', 'leadWrist'],
     value: (c) => { const b = c.B('P3'); return angleAt(b.leadShoulder, b.leadElbow, b.leadWrist); },
     range: { iron: [145, 181], driver: [145, 181] },

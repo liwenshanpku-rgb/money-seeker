@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>挥杆教练 · P1–P10 分析</title>
+  <meta name="description" content="上传高尔夫挥杆视频，按 P1–P10 体系逐位置对比职业模板，找出问题并给出改进方法。">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <h1>挥杆教练 <span>P1–P10 挥杆分析</span></h1>
+      <p class="lead">上传一段挥杆视频，自动识别 10 个关键位置，逐项对比职业挥杆模板，指出问题并给出改进方法和练习。视频只在你的浏览器里处理，不会上传。</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel" id="upload">
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept="video/*" hidden>
+        <video id="video" playsinline muted preload="auto"></video>
+        <div class="drop-hint" id="dropHint">
+          <strong>点击或拖入挥杆视频</strong>
+          <span>正面或侧面拍摄，全身入镜，3–10 秒，最好 60fps 以上</span>
+        </div>
+      </div>
+
+      <div class="settings">
+        <label>惯用手
+          <select id="handed"><option value="right">右手球员</option><option value="left">左手球员</option></select>
+        </label>
+        <label>球杆
+          <select id="club"><option value="iron">铁杆</option><option value="driver">一号木</option></select>
+        </label>
+        <label>拍摄角度
+          <select id="view"><option value="auto">自动识别</option><option value="fo">正面（Face-on）</option><option value="dtl">侧面（Down-the-line）</option></select>
+        </label>
+        <label>采样帧率
+          <select id="fps"><option value="30">30 fps（较快）</option><option value="60" selected>60 fps（节奏更准）</option></select>
+        </label>
+        <label>识别模型
+          <select id="model"><option value="full">标准</option><option value="heavy">高精度（较慢）</option></select>
+        </label>
+        <label>分析区间（秒）
+          <span class="range"><input type="number" id="start" min="0" step="0.1" value="0"> – <input type="number" id="end" min="0" step="0.1"></span>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="analyze" disabled>开始分析</button>
+        <button id="demo">用示例挥杆体验</button>
+        <label class="pro-upload">
+          <input type="file" id="proFile" accept="video/*" hidden>
+          <span class="link">＋ 上传职业球员视频作为对比模板（可选）</span>
+        </label>
+        <span class="pro-status" id="proStatus"></span>
+      </div>
+      <video id="proVideo" playsinline muted preload="auto" hidden></video>
+
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><div id="bar"></div></div>
+        <span id="progressText"></span>
+      </div>
+      <p class="error" id="error" hidden></p>
+    </section>
+
+    <section id="results" hidden>
+      <div class="summary panel">
+        <div class="score">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="ring" id="ring"/></svg>
+          <div><strong id="score">–</strong><span>综合评分</span></div>
+        </div>
+        <div class="facts" id="facts"></div>
+        <div class="counts" id="counts"></div>
+      </div>
+
+      <div class="panel">
+        <h2>最需要改进的 3 点</h2>
+        <ol class="priorities" id="priorities"></ol>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h2>手部轨迹 <small>蓝 = 上杆，红 = 下杆，绿色虚线 = 职业模板</small></h2>
+          <canvas id="pathCanvas" width="560" height="560"></canvas>
+        </div>
+        <div class="panel">
+          <h2>校正关键位置 <small>自动识别不准时，拖动选帧后设置</small></h2>
+          <canvas id="scrubCanvas" width="560" height="420"></canvas>
+          <input type="range" id="scrub" min="0" value="0">
+          <canvas id="timeline" width="560" height="90"></canvas>
+          <div class="assign">
+            <select id="assignPos"></select>
+            <button id="assign">设为当前帧</button>
+            <button id="resetPhases">恢复自动识别</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>P1–P10 逐位置对比
+          <label class="toggle"><input type="checkbox" id="showTemplate" checked> 叠加职业模板</label>
+        </h2>
+        <p class="legend"><i class="sw user"></i>你的动作 <i class="sw pro"></i>职业模板（按你的身高和站位对齐）</p>
+        <div class="positions" id="positions"></div>
+      </div>
+
+      <div class="panel">
+        <h2>全部检查项</h2>
+        <div class="table-wrap"><table class="metrics" id="metricsTable"></table></div>
+      </div>
+
+      <div class="panel" id="coachPanel">
+        <h2>AI 教练点评</h2>
+        <p class="muted">把 10 张关键帧和上面的测量数据交给 Claude，让它像教练一样看图点评、给出训练计划。需要用 <code>server.py</code> 启动本工具并配置 <code>ANTHROPIC_API_KEY</code>。</p>
+        <textarea id="coachNote" rows="2" placeholder="可选：补充你的情况，例如「经常打右曲」「差点 18」"></textarea>
+        <button class="primary" id="coach">生成 AI 点评</button>
+        <div class="coach" id="coachOut"></div>
+      </div>
+    </section>
+
+    <section class="panel tips">
+      <h2>拍摄建议</h2>
+      <ul>
+        <li><b>正面（Face-on）</b>：相机正对胸口，高度约在腰部，球员居中；适合看重心转移、头部稳定、侧倾、手领先。</li>
+        <li><b>侧面（Down-the-line）</b>：相机在球员身后、沿目标线方向，镜头对准双手；适合看脊柱角、提前伸展、挥杆平面。</li>
+        <li>相机固定（三脚架），全身和球杆都在画面里，光线充足，穿与背景对比明显的衣服。</li>
+        <li>手机用「慢动作」或 60/120fps 拍摄效果最好；一段视频只包含一次挥杆。</li>
+        <li>测量来自 2D 视频，存在透视误差，请关注趋势和明显偏差，细微数值差异不必在意。</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap muted">姿态识别：MediaPipe Pose（在浏览器本地运行）。职业模板为 P1–P10 位置的典型职业参数，不代表某位具体球员。</footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

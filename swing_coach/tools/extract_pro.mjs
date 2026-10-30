@@ -3,6 +3,7 @@
 //
 // 用法：node swing_coach/tools/extract_pro.mjs <视频文件> <输出 json> --view fo|dtl [--name "Adam Scott"] [--fps 30]
 //        [--start 秒] [--end 秒] [--P '{"P1":12}']   （--P 可手动修正自动识别的位置，按帧序号）
+//        [--slow 15]   慢动作视频的放慢倍数：时间换算回真实速度，P 位置检测和节奏才准
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -26,6 +27,7 @@ const fps = Number(opt('fps', 30));
 const start = Number(opt('start', 0));
 const end = opt('end') ? Number(opt('end')) : undefined;
 const manualP = opt('P') ? JSON.parse(opt('P')) : {};
+const slow = Number(opt('slow', 1));
 
 // 只保存用到的关键点：鼻子、肩肘腕、髋膝踝、脚跟脚尖
 export const KEEP = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
@@ -58,15 +60,17 @@ const result = await page.evaluate(async ({ fps, start, end }) => {
 await browser.close();
 server.close();
 
+// 慢动作：t 换算成真实时间，videoT 保留视频里的时间（截图用）
+for (const f of result.frames) { f.videoT = f.t; f.t /= slow; }
 const { detectPhases } = await import(path.join(webDir, 'js/phases.js'));
-const det = detectPhases(result.frames, { handed: 'right', view, club: 'iron' });
+const det = detectPhases(result.frames, { handed: 'right', view, club: opt('club', 'iron') });
 const P = { ...det.P, ...manualP };
 
 const data = {
-  name: opt('name', ''), view, handed: 'right', club: 'iron', fps, aspect: r4(result.aspect),
+  name: opt('name', ''), view, handed: 'right', club: opt('club', 'iron'), fps, slow, aspect: r4(result.aspect),
   keep: KEEP, P,
   frames: result.frames.map((f) => ({
-    t: r4(f.t),
+    t: r4(f.t), vt: r4(f.videoT),
     lm: KEEP.map((i) => [r4(f.lm[i].x), r4(f.lm[i].y), r4(f.lm[i].v ?? 1)]),
     wl: f.wl ? KEEP.map((i) => [r4(f.wl[i].x), r4(f.wl[i].y), r4(f.wl[i].z)]) : null,
   })),

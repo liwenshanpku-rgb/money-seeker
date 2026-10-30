@@ -169,6 +169,9 @@ table.metrics th { color: var(--muted); font-weight: 500; white-space: nowrap; }
 table.metrics td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 table.metrics .advice { color: var(--muted); font-size: 13px; }
 table.metrics .advice b { color: var(--text); font-weight: 600; }
+table.metrics .lbl, table.metrics .m-only { display: none; }
+table.metrics details summary { cursor: pointer; color: var(--accent); }
+table.metrics details[open] summary { margin-bottom: 4px; }
 
 #coachPanel textarea { margin: 6px 0 10px; }
 .gh-setup { margin: 8px 0 12px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
@@ -200,6 +203,22 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
   .grid2 { grid-template-columns: 1fr; }
   .summary { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .slots { grid-template-columns: 1fr; }
+  /* 检查项表格在手机上改为卡片列表 */
+  table.metrics, table.metrics tbody { display: block; }
+  table.metrics thead { display: none; }
+  table.metrics tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  table.metrics td { display: block; padding: 0; border: none; }
+  table.metrics td.c-view { display: none; }
+  table.metrics .c-pos { order: 1; font-weight: 600; }
+  table.metrics .c-name { order: 2; font-weight: 600; flex: 1 1 calc(100% - 170px); }
+  table.metrics .c-status { order: 3; }
+  table.metrics .c-val { order: 4; }
+  table.metrics .c-range { order: 5; }
+  table.metrics .c-pro { order: 6; }
+  table.metrics .c-val, table.metrics .c-range, table.metrics .c-pro { white-space: nowrap; font-size: 13px; }
+  table.metrics .c-advice { order: 7; flex: 1 1 100%; }
+  table.metrics .m-only { display: inline-block; }
+  table.metrics .lbl { display: inline; color: var(--muted); }
   .summary-actions { justify-content: center; }
   h1 { font-size: 23px; }
   h1 span { display: block; margin: 4px 0 0; }

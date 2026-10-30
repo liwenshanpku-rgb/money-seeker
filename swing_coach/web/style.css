@@ -169,6 +169,7 @@ input[type=text], input[type=password] { font: inherit; color: var(--text); back
 .method h3 { margin: 0 0 4px; font-size: 15.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .method > summary { cursor: pointer; }
 .method[open] > summary { margin-bottom: 8px; }
+#cardImg { width: 100%; max-width: 540px; border-radius: 12px; margin: 12px 0 4px; display: block; border: 1px solid var(--line); }
 #shareImg { width: 100%; border-radius: 10px; margin: 12px 0 4px; display: block; }
 .steps { font-size: 13.5px; padding-left: 20px; margin: 10px 0 0; }
 a.btn { display: inline-block; text-decoration: none; font: inherit; border-radius: 9px; padding: 9px 16px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }

@@ -80,6 +80,20 @@
         <ol class="priorities" id="priorities"></ol>
       </div>
 
+      <div class="panel" id="friendPanel">
+        <h2>分享给朋友 <small>生成一张结果卡片：评分 + P1–P10 拼图 + 最需要改进的地方，适合发微信</small></h2>
+        <label class="check"><input type="checkbox" id="cardFrames" checked> 卡片里包含视频画面（取消则只有骨架）</label>
+        <button class="primary" id="makeCard">生成结果卡片</button>
+        <div id="cardPanel" hidden>
+          <img id="cardImg" alt="挥杆分析结果卡片">
+          <div class="actions">
+            <button class="primary" id="shareCard">分享</button>
+            <a class="btn" id="saveCard" download="swing-result.jpg">保存图片</a>
+          </div>
+          <p class="muted small" id="cardStatus">iPhone 上也可以长按卡片图片，选「存储到照片」或直接分享。</p>
+        </div>
+      </div>
+
       <div class="grid2">
         <div class="panel">
           <h2>手部轨迹 <small>蓝 = 上杆，红 = 下杆，绿色虚线 = 职业模板</small></h2>

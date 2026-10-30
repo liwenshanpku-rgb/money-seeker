@@ -24,3 +24,10 @@ test('分享文字包含提示词、基本信息、测量结果和补充说明',
   assert.match(text, /# 我的补充\n经常打右曲/);
   assert.match(text, /P1 0\.5，P4 1\.4/);
 });
+
+test('中文按宽度逐字折行', async () => {
+  const { wrapText } = await import('../web/js/share.js');
+  const ctx = { measureText: (s) => ({ width: [...s].length * 10 }) };
+  assert.deepEqual(wrapText(ctx, '一二三四五六七', 30), ['一二三', '四五六', '七']);
+  assert.deepEqual(wrapText(ctx, '一二\n三', 100), ['一二', '三']);
+});

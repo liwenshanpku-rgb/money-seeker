@@ -114,20 +114,47 @@
     </section>
 
     <section class="panel" id="coachPanel">
-      <h2>AI 教练点评 <small>用你的 Claude 订阅额度，不走 API 计费</small></h2>
-      <p class="muted">把 10 张关键帧和测量数据推送到 GitHub 仓库的 <code>swing-coach</code> 分支，由 GitHub Actions 里的 Claude Code 写出点评，通常 2–5 分钟。先完成上面的分析，再生成点评。可以先关掉页面，稍后回来点「查看上次点评」。</p>
-      <details class="gh-setup" id="ghSetup">
-        <summary>GitHub 设置（只需一次）</summary>
-        <label>仓库（owner/repo）<input type="text" id="ghRepo" placeholder="例如 yourname/money-seeker" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
-        <label>GitHub token <input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
-        <p class="muted small">在 GitHub → Settings → Developer settings → Fine-grained tokens 新建，只选这个仓库，权限 Contents 选 Read and write。token 只保存在这台设备的浏览器里。</p>
-      </details>
-      <label class="check"><input type="checkbox" id="sendFrames"> 上传真实视频画面（默认只上传骨架图；仓库公开时，处理期间画面对外可见，完成后会自动删除）</label>
+      <h2>AI 教练点评</h2>
+      <p class="muted">先完成上面的分析，再让 Claude 看关键帧给你点评。</p>
       <textarea id="coachNote" rows="2" placeholder="可选：补充你的情况，例如「经常打右曲」「差点 18」"></textarea>
-      <div class="actions">
-        <button class="primary" id="coach" disabled>生成 AI 点评</button>
-        <button id="coachLast" hidden>查看上次点评</button>
+
+      <div class="method">
+        <h3>方式一：发给 Claude App <span class="chip good">免费 · 无需设置</span></h3>
+        <p class="muted">生成一张 P1–P10 拼图和一段点评请求文字，分享到 Claude App，粘贴文字后发送。用的是你在 Claude App 里正常聊天的额度，图片不会经过 GitHub。</p>
+        <label class="check"><input type="checkbox" id="shareFrames" checked> 拼图里包含视频画面（取消则只有骨架）</label>
+        <button class="primary" id="prepareShare" disabled>生成点评素材</button>
+        <div id="sharePanel" hidden>
+          <img id="shareImg" alt="P1–P10 关键帧拼图">
+          <div class="actions">
+            <button class="primary" id="shareBtn">分享到 Claude</button>
+            <button id="copyBtn">复制文字</button>
+            <a class="btn" id="saveImg" download="swing-p1-p10.jpg">保存图片</a>
+            <a class="btn" href="https://claude.ai/new" target="_blank" rel="noopener">打开 Claude 网页版</a>
+          </div>
+          <ol class="steps muted">
+            <li>点「分享到 Claude」：文字会自动复制，并弹出分享面板，选择 Claude App。</li>
+            <li>在 Claude 的输入框里长按，选择「粘贴」，把点评请求文字贴进去，然后发送。</li>
+            <li>没有分享面板（如电脑浏览器）时：先「保存图片」和「复制文字」，再打开 Claude，上传图片并粘贴文字。</li>
+          </ol>
+          <p class="muted small" id="shareStatus"></p>
+        </div>
       </div>
+
+      <details class="method" id="autoMethod">
+        <summary><b>方式二：自动点评</b> <span class="muted small">需要配置 GitHub 和 Claude token，结果自动显示在本页</span></summary>
+        <p class="muted">把 10 张关键帧和测量数据推送到 GitHub 仓库的 <code>swing-coach</code> 分支，由 GitHub Actions 里的 Claude Code 写出点评（用订阅额度），通常 2–5 分钟。可以先关掉页面，稍后回来点「查看上次点评」。</p>
+        <details class="gh-setup" id="ghSetup">
+          <summary>GitHub 设置（只需一次）</summary>
+          <label>仓库（owner/repo）<input type="text" id="ghRepo" placeholder="例如 yourname/money-seeker" autocapitalize="off" autocomplete="off" spellcheck="false"></label>
+          <label>GitHub token <input type="password" id="ghToken" placeholder="github_pat_…" autocomplete="off"></label>
+          <p class="muted small">在 GitHub → Settings → Developer settings → Fine-grained tokens 新建，只选这个仓库，权限 Contents 选 Read and write。token 只保存在这台设备的浏览器里。</p>
+        </details>
+        <label class="check"><input type="checkbox" id="sendFrames"> 上传真实视频画面（默认只上传骨架图；仓库公开时，处理期间画面对外可见，完成后会自动删除）</label>
+        <div class="actions">
+          <button class="primary" id="coach" disabled>生成自动点评</button>
+          <button id="coachLast" hidden>查看上次点评</button>
+        </div>
+      </details>
       <div class="coach" id="coachOut"></div>
     </section>
 

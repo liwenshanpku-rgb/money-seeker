@@ -8,6 +8,7 @@ import {
   alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, videoSource, blankSource,
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
+import { buildShareText, montage, canvasToBlob, copyText } from './share.js';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
@@ -161,6 +162,8 @@ async function renderAll() {
   const u = state.user;
   $('results').hidden = false;
   $('coach').disabled = false;
+  $('prepareShare').disabled = false;
+  $('sharePanel').hidden = true;
   u.crop = cropBox(POSITIONS.map((p) => u.frames[u.P[p]].lm).concat(
     POSITIONS.map((p) => alignTemplate(p, u.ref, opts(u)).landmarks)), u.aspect);
   if (state.pro) state.pro.crop = cropBox(POSITIONS.map((p) => state.pro.frames[state.pro.P[p]].lm), state.pro.aspect);
@@ -323,6 +326,7 @@ const KEY_REPO = 'swingCoach.repo', KEY_TOKEN = 'swingCoach.token', KEY_LAST = '
 $('ghRepo').value = store.get(KEY_REPO) || guessRepo();
 $('ghToken').value = store.get(KEY_TOKEN) || '';
 if (!$('ghToken').value) $('ghSetup').open = true;
+else $('autoMethod').open = true;
 $('ghRepo').addEventListener('change', () => store.set(KEY_REPO, $('ghRepo').value.trim()));
 $('ghToken').addEventListener('change', () => store.set(KEY_TOKEN, $('ghToken').value.trim()));
 $('coachLast').hidden = !store.get(KEY_LAST);
@@ -331,20 +335,92 @@ function coachClient() {
   return new GitHubCoach($('ghRepo').value.trim(), $('ghToken').value.trim());
 }
 
-// 关键帧图片：默认只画骨架（不含视频画面），勾选后才带上真实画面
-async function keyframeImages(u, withVideo) {
-  const out = [];
-  const canvas = document.createElement('canvas');
-  canvas.width = 480; canvas.height = 560;
+// 关键帧：withVideo 为 false 时只画骨架（不含视频画面）
+async function keyframeCanvases(u, withVideo, { width = 480, height = 560 } = {}) {
   const source = withVideo ? u.source : blankSource();
+  const out = [];
   for (const pos of POSITIONS) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
     await drawFrame(canvas, source, u.frames[u.P[pos]], u.crop, {
       template: alignTemplate(pos, u.ref, opts(u)), label: `${pos} ${POSITION_INFO[pos].name}`,
     });
-    out.push({ pos, data: canvas.toDataURL('image/jpeg', 0.8) });
+    out.push(canvas);
   }
   return out;
 }
+
+async function keyframeImages(u, withVideo) {
+  const canvases = await keyframeCanvases(u, withVideo);
+  return canvases.map((c, i) => ({ pos: POSITIONS[i], data: c.toDataURL('image/jpeg', 0.8) }));
+}
+
+// 发给 AI 的测量数据（两种方式共用）
+function coachData(u, withVideo) {
+  return {
+    settings: { handed: u.settings.handed, club: u.settings.club, view: u.view, demo: !!u.demo, skeletonOnly: !withVideo },
+    note: $('coachNote').value.trim(),
+    score: u.summary.score,
+    timing: Object.fromEntries(POSITIONS.map((p) => [p, Number(u.frames[u.P[p]].t.toFixed(3))])),
+    metrics: u.results.map((r) => ({
+      pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
+      status: r.status, issue: r.advice?.issue ?? null, pro_value: proValue(r.id),
+    })),
+  };
+}
+
+// ---------- 方式一：发给 Claude App ----------
+let coachPrompt = null;
+const share = { text: '', file: null, url: null };
+
+$('prepareShare').addEventListener('click', async () => {
+  const u = state.user;
+  if (!u) return;
+  $('prepareShare').disabled = true;
+  $('shareStatus').textContent = '';
+  try {
+    coachPrompt ||= await fetch('coach-prompt.md').then((r) => { if (!r.ok) throw new Error('读取提示词失败'); return r.text(); });
+    const withVideo = $('shareFrames').checked && !u.demo;
+    const big = montage(await keyframeCanvases(u, withVideo, { width: 360, height: 420 }));
+    const blob = await canvasToBlob(big);
+    if (share.url) URL.revokeObjectURL(share.url);
+    share.url = URL.createObjectURL(blob);
+    share.file = new File([blob], 'swing-p1-p10.jpg', { type: 'image/jpeg' });
+    share.text = buildShareText(coachPrompt, coachData(u, withVideo));
+    $('shareImg').src = share.url;
+    $('saveImg').href = share.url;
+    $('sharePanel').hidden = false;
+    $('shareBtn').hidden = !(navigator.canShare && navigator.canShare({ files: [share.file] }));
+    $('sharePanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    $('shareStatus').textContent = err.message || String(err);
+    $('sharePanel').hidden = false;
+  } finally {
+    $('prepareShare').disabled = false;
+  }
+});
+
+// 复制和分享都必须直接在点击里发起（iPhone 要求用户手势），所以不在调用前 await 其他操作
+$('shareBtn').addEventListener('click', () => {
+  if (!share.file) return;
+  const copied = copyText(share.text);
+  navigator.share({ files: [share.file], text: share.text })
+    .then(async () => {
+      $('shareStatus').textContent = (await copied)
+        ? '文字已复制。在 Claude 输入框长按「粘贴」后发送。'
+        : '分享完成。如果 Claude 里没有文字，请点「复制文字」再粘贴。';
+    })
+    .catch(async (err) => {
+      if (err.name === 'AbortError') return;
+      $('shareStatus').textContent = `分享失败：${err.message}。请用「保存图片」和「复制文字」手动发送。`;
+    });
+});
+
+$('copyBtn').addEventListener('click', async () => {
+  $('shareStatus').textContent = (await copyText(share.text))
+    ? '点评请求文字已复制，到 Claude 里粘贴即可。'
+    : '复制失败，请长按下面的文字手动复制。';
+});
 
 async function waitAndShow(gh, id) {
   const out = $('coachOut');
@@ -367,17 +443,7 @@ $('coach').addEventListener('click', async () => {
     store.set(KEY_TOKEN, gh.token);
     out.innerHTML = '<p class="muted">正在生成关键帧并提交…</p>';
     const withVideo = $('sendFrames').checked && !u.demo;
-    const payload = {
-      settings: { handed: u.settings.handed, club: u.settings.club, view: u.view, demo: !!u.demo, skeletonOnly: !withVideo },
-      note: $('coachNote').value.trim(),
-      score: u.summary.score,
-      timing: Object.fromEntries(POSITIONS.map((p) => [p, Number(u.frames[u.P[p]].t.toFixed(3))])),
-      metrics: u.results.map((r) => ({
-        pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
-        status: r.status, issue: r.advice?.issue ?? null, pro_value: proValue(r.id),
-      })),
-      images: await keyframeImages(u, withVideo),
-    };
+    const payload = { ...coachData(u, withVideo), images: await keyframeImages(u, withVideo) };
     const id = await gh.submit(payload);
     store.set(KEY_LAST, id);
     $('coachLast').hidden = false;

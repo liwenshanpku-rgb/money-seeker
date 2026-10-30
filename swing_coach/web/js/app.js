@@ -93,15 +93,20 @@ function updateAnalyzeButton() {
 }
 
 // 结果页的「分析新视频」：清掉旧结果，回到上传区
-$('newAnalysis').addEventListener('click', () => {
-  VIEWS.forEach(clearSlot);
-  state.views = { fo: null, dtl: null };
+function hideResults() {
   $('results').hidden = true;
   $('coach').disabled = true;
   $('prepareShare').disabled = true;
   $('coachOut').innerHTML = '';
   hideError();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+$('newAnalysis').addEventListener('click', () => {
+  VIEWS.forEach(clearSlot);
+  state.views = { fo: null, dtl: null };
+  state.saved = null;
+  hideResults();
 });
 
 // ---------- 分析流程 ----------
@@ -165,6 +170,7 @@ $('analyze').addEventListener('click', async () => {
       views[v] = await analyzeVideo(video, { ...s, view: v, start, end }, todo.length > 1 ? `${VIEW_SHORT[v]}：` : '');
     }
     state.views = views;
+    state.saved = null;
     setProgress(1, '完成');
     await renderAll();
   } catch (err) {
@@ -179,6 +185,8 @@ $('analyze').addEventListener('click', async () => {
 // 示例：带典型业余问题的合成挥杆（反向脊柱角、重心没转移、下杆转髋不够、节奏偏快），正面 + 侧面各一段
 $('demo').addEventListener('click', async () => {
   hideError();
+  // 先把用户自己的分析结果存起来，退出示例时恢复
+  if (analyses().length && !isDemo()) state.saved = state.views;
   const s = settings();
   const table = structuredClone(PRO_PARAMS);
   Object.assign(table.P4, { tilt: -6, shiftX: 0.02, shoulder: 78, bend: 33 });
@@ -197,11 +205,23 @@ $('demo').addEventListener('click', async () => {
   await renderAll();
 });
 
+$('exitDemo').addEventListener('click', async () => {
+  if (state.saved) {
+    state.views = state.saved;
+    state.saved = null;
+    await renderAll();
+  } else {
+    state.views = { fo: null, dtl: null };
+    hideResults();
+  }
+});
+
 // ---------- 渲染 ----------
 async function renderAll() {
   const list = analyses();
   if (!list.length) return;
   $('results').hidden = false;
+  $('demoBanner').hidden = !isDemo();
   $('coach').disabled = false;
   $('prepareShare').disabled = false;
   $('sharePanel').hidden = true;

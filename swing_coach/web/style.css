@@ -131,6 +131,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .chip.warn { background: var(--warn); }
 .chip.bad { background: var(--bad); }
 .chip.na { background: var(--na); }
+.chip.ref { background: #6b8bb5; }
 
 .priorities { margin: 0; padding-left: 20px; display: grid; gap: 12px; }
 .priorities li b { font-size: 15.5px; }
@@ -155,6 +156,9 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .pos-card .imgs { display: grid; grid-template-columns: 1fr; }
 .pos-card .imgs.n2 { grid-template-columns: 1fr 1fr; }
 .pos-card .imgs.n3 { grid-template-columns: 1fr 1fr 1fr; }
+.pos-card .imgs.n4 { grid-template-columns: 1fr 1fr; }
+.pro-watch { margin-top: 8px; }
+.pro-watch summary { cursor: pointer; color: var(--accent); font-size: 14px; }
 .pos-card canvas { border-radius: 0; }
 .pos-card .body { padding: 10px 12px; }
 .pos-card h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; gap: 6px; }

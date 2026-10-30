@@ -135,7 +135,7 @@ export const METRICS = [
     id: 'fo_p1_tilt', view: 'fo', pos: 'P1', name: '准备时脊柱侧倾', unit: '°', digits: 0,
     points: ['leadShoulder', 'trailShoulder', 'leadHip', 'trailHip'],
     value: (c) => c.spineTilt(c.b1),
-    range: { iron: [2, 14], driver: [7, 20] },
+    range: { iron: [-3, 14], driver: [4, 20] },
     about: '从正面看上半身向远离目标侧的倾斜。后手握杆位置更低，所以后肩自然低于前肩。',
     low: { issue: '上半身没有侧倾 / 偏向目标', why: '容易形成上杆「反向脊柱角」和下杆过陡的切球路径，一号木尤其容易打低打右。', fix: '准备时后肩自然放低、胸骨略微落在球后方，头在球后侧。', drill: '把一根杆竖放在两脚中间，准备时让头部和胸骨位于这根杆的后方再挥杆。' },
     high: { issue: '侧倾过大', why: '重心被压在后脚，下杆难以向前转移，容易打厚、打出右曲或左曲。', fix: '减小侧倾，铁杆以后肩略低于前肩为度。', drill: '对镜子做准备姿势，让脊柱侧倾大约一个拳头的肩高差。' },
@@ -162,7 +162,7 @@ export const METRICS = [
     id: 'fo_p3_leadarm', view: 'fo', pos: 'P3', name: '上杆中前臂伸直度', unit: '°', digits: 0,
     points: ['leadShoulder', 'leadElbow', 'leadWrist'],
     value: (c) => { const b = c.B('P3'); return angleAt(b.leadShoulder, b.leadElbow, b.leadWrist); },
-    range: { iron: [150, 181], driver: [150, 181] },
+    range: { iron: [145, 181], driver: [145, 181] },
     about: '前臂（右手球员的左臂）肘关节夹角。前臂保持伸展能维持挥杆半径和击球一致性。',
     low: { issue: '前臂过早弯曲', why: '挥杆半径变小，下杆要重新伸直手臂，触球点不稳定、距离损失。', fix: '让躯干转动带着手臂走，而不是靠弯曲手臂把杆抬起来。', drill: '在两前臂间夹一个小球或毛巾做半挥杆，保持手臂与胸口的三角结构。' },
     high: null,
@@ -179,6 +179,7 @@ export const METRICS = [
   {
     id: 'fo_p4_shoulder', view: 'fo', pos: 'P4', name: '上杆顶点肩部转动（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P4'),
     range: { iron: [72, 115], driver: [78, 120] },
@@ -189,6 +190,7 @@ export const METRICS = [
   {
     id: 'fo_p4_hip', view: 'fo', pos: 'P4', name: '上杆顶点髋部转动（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => c.rot('hip', 'P4'),
     range: { iron: [28, 62], driver: [30, 65] },
@@ -225,6 +227,7 @@ export const METRICS = [
   },
   {
     id: 'fo_p4_leadarm', view: 'fo', pos: 'P4', name: '上杆顶点前臂伸直度', unit: '°', digits: 0,
+    ref: true,
     points: ['leadShoulder', 'leadElbow', 'leadWrist'],
     value: (c) => { const b = c.B('P4'); return angleAt(b.leadShoulder, b.leadElbow, b.leadWrist); },
     range: { iron: [145, 181], driver: [145, 181] },
@@ -254,7 +257,7 @@ export const METRICS = [
     id: 'fo_p6_head', view: 'fo', pos: 'P6', name: '下杆头部位置', unit: '× 站宽', digits: 2,
     points: ['head'],
     value: (c) => c.toTarget(c.B('P6').head, c.b1.head),
-    range: { iron: [-0.4, 0.06], driver: [-0.45, 0.03] },
+    range: { iron: [-0.4, 0.18], driver: [-0.45, 0.15] },
     about: '下杆时头部应保持在准备位置或略靠后（「留在球后」），下半身向前而头不跟着冲。',
     low: { issue: '头部向后倒过多', why: '上身后仰，杆头最低点后移，容易打厚或挑球。', fix: '下杆时让胸口跟着髋部转向目标，不要刻意往后仰。', drill: '慢速下杆到 P6 停住，检查头部是否仍在两脚之间偏后。' },
     high: { issue: '头部前冲（越过球）', why: '上身抢先，出杆角度过陡，容易拉左、打深草皮。', fix: '下杆让下半身先动，头部留在球后方。', drill: '在头部前侧放一根竖杆作为参照，下杆到击球头不要越过它。' },
@@ -262,6 +265,7 @@ export const METRICS = [
   {
     id: 'fo_p6_hipopen', view: 'fo', pos: 'P6', name: '下杆髋部打开（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P6'),
     range: { iron: [5, 40], driver: [3, 40] },
@@ -272,6 +276,7 @@ export const METRICS = [
   {
     id: 'fo_p6_sequence', view: 'fo', pos: 'P6', name: '下杆顺序：髋先肩后', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip', 'leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P6') - c.rot('hip', 'P6'),
     range: { iron: [15, 70], driver: [15, 70] },
@@ -282,6 +287,7 @@ export const METRICS = [
   {
     id: 'fo_p7_hipturn', view: 'fo', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P7'),
     range: { iron: [25, 60], driver: [25, 62] },
@@ -302,7 +308,7 @@ export const METRICS = [
     id: 'fo_p7_head', view: 'fo', pos: 'P7', name: '击球时头部位置', unit: '× 站宽', digits: 2,
     points: ['head'],
     value: (c) => c.toTarget(c.B('P7').head, c.b1.head),
-    range: { iron: [-0.45, 0.06], driver: [-0.5, 0.02] },
+    range: { iron: [-0.45, 0.18], driver: [-0.5, 0.15] },
     about: '击球瞬间头部应在准备位置或略靠后，形成「头在球后」的击球姿态。',
     low: { issue: '击球时上身后仰过多', why: '最低点后移、杆面动态杆面角增加，容易挑球、打厚。', fix: '下杆胸口跟随转向目标，不要刻意把身体往后倒。', drill: '慢速击球练习，在击球位置停住检查头部是否只略在球后方。' },
     high: { issue: '击球时头部越过球', why: '上身抢先、出杆过陡，铁杆打深草皮、一号木打低拉左。', fix: '下杆时下半身先动，头留在球后，感觉「在球后方击球」。', drill: '在球的目标侧地上放一个物体，击球时眼睛盯住球的后侧。' },
@@ -320,7 +326,7 @@ export const METRICS = [
     id: 'fo_p7_tilt', view: 'fo', pos: 'P7', name: '击球时脊柱侧倾', unit: '°', digits: 0,
     points: ['leadShoulder', 'trailShoulder', 'leadHip', 'trailHip'],
     value: (c) => c.spineTilt(c.B('P7')),
-    range: { iron: [15, 38], driver: [20, 42] },
+    range: { iron: [8, 38], driver: [14, 42] },
     about: '击球时上半身向后侧倾斜。骨盆前移、头在球后，自然形成这个侧倾。',
     low: { issue: '击球时上身过直 / 倒向目标', why: '通常伴随上身抢先，出杆过陡，打深草皮或拉左。', fix: '下杆时让骨盆前移、头留后，后肩向下向前转。', drill: '下杆慢动作，击球位置停住，检查后肩是否低于前肩。' },
     high: { issue: '击球时后仰过多', why: '最低点后移，容易打厚、挑球，一号木打出高飘球。', fix: '减少刻意后仰，让胸口在击球时朝向球。', drill: '在后肩后方放对齐杆参照，击球时不要往后倒。' },
@@ -417,7 +423,7 @@ export const METRICS = [
     id: 'dtl_p4_hips', view: 'dtl', pos: 'P4', name: '上杆顶点臀部位置', unit: '× 躯干', digits: 2,
     points: ['leadHip', 'trailHip'],
     value: (c) => c.toBall(c.B('P4').hipMid, c.b1.hipMid),
-    range: { iron: [-0.15, 0.06], driver: [-0.15, 0.06] },
+    range: { iron: [-0.15, 0.1], driver: [-0.15, 0.1] },
     about: '上杆时骨盆朝球方向的移动（正值 = 朝球移动）。应保持或略向后。',
     low: { issue: '上杆臀部后移过多', why: '重心退到脚跟，下杆容易向前冲回球。', fix: '上杆转动时保持重心在脚掌中部。', drill: '准备时把重心放在脚掌中部，上杆停顿检查不压脚跟。' },
     high: { issue: '上杆时臀部向球靠近', why: '失去髋部空间，下杆手臂没有通道，容易起身、打出右推或杆根球。', fix: '上杆时后髋向后转（朝自己身后），而不是向球推。', drill: '臀部贴墙练习：上杆时后侧臀部始终贴墙。' },
@@ -425,6 +431,7 @@ export const METRICS = [
   {
     id: 'dtl_p4_hipturn', view: 'dtl', pos: 'P4', name: '上杆顶点髋部转动（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => c.rot('hip', 'P4'),
     range: { iron: [28, 65], driver: [30, 68] },
@@ -435,6 +442,7 @@ export const METRICS = [
   {
     id: 'dtl_p4_shoulder', view: 'dtl', pos: 'P4', name: '上杆顶点肩部转动（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P4'),
     range: { iron: [72, 115], driver: [78, 120] },
@@ -454,6 +462,7 @@ export const METRICS = [
   {
     id: 'dtl_p6_hipopen', view: 'dtl', pos: 'P6', name: '下杆髋部打开（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P6'),
     range: { iron: [5, 40], driver: [3, 40] },
@@ -464,6 +473,7 @@ export const METRICS = [
   {
     id: 'dtl_p6_sequence', view: 'dtl', pos: 'P6', name: '下杆顺序：髋先肩后', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip', 'leadShoulder', 'trailShoulder'],
     value: (c) => c.rot('shoulder', 'P6') - c.rot('hip', 'P6'),
     range: { iron: [15, 70], driver: [15, 70] },
@@ -492,6 +502,7 @@ export const METRICS = [
   {
     id: 'dtl_p7_hipopen', view: 'dtl', pos: 'P7', name: '击球时髋部打开（估算）', unit: '°', digits: 0,
     rotation: true,
+    ref: true,
     points: ['leadHip', 'trailHip'],
     value: (c) => -c.rot('hip', 'P7'),
     range: { iron: [25, 60], driver: [25, 62] },
@@ -503,7 +514,7 @@ export const METRICS = [
     id: 'dtl_p7_head', view: 'dtl', pos: 'P7', name: '击球时头部高度', unit: '× 躯干', digits: 2,
     points: ['head'],
     value: (c) => c.drop(c.B('P7').head, c.b1.head),
-    range: { iron: [-0.08, 0.12], driver: [-0.1, 0.12] },
+    range: { iron: [-0.08, 0.28], driver: [-0.1, 0.28] },
     about: '击球时头部相对准备时的上下变化（正值 = 下沉）。职业球员击球时头部常略微下沉。',
     low: { issue: '击球时头部抬起', why: '身体起立，打薄、打顶。', fix: '击球时眼睛盯住球的后侧，保持胸口朝下。', drill: '击球后继续看着球的位置 1 秒再抬头。' },
     high: { issue: '击球时头部下沉过多', why: '入射过深，容易打厚。', fix: '保持准备时的身体高度。', drill: '慢速击球练习，体会稳定的头部高度。' },
@@ -562,6 +573,8 @@ export function evaluate(ctx) {
     let g = grade(value, range);
     if (visibility < 0.5 && g.status !== 'na') g = { status: 'na', severity: 0, lowVis: true };
     if (m.rotation && ctx.oblique()) g = { status: 'na', severity: 0, oblique: true };
+    // 单机位估算误差大的指标只作参考：不按绝对区间打分（选了职业球员时改为和他对比，见 compareToPro）
+    if (m.ref && g.status !== 'na') g = { status: 'ref', severity: 0 };
     const advice = g.side ? m[g.side] : null;
     results.push({ metric: m, id: m.id, pos: m.pos, value, range, visibility, ...g, advice });
   }
@@ -570,8 +583,17 @@ export function evaluate(ctx) {
 
 const POINTS = { good: 100, warn: 60, bad: 20 };
 
+// 参考类指标和职业球员按同一方法测出的数值对比：系统误差相同，差值才有意义
+export function compareToPro(r, proValue, tol = 15) {
+  if (r.status !== 'ref' || !Number.isFinite(proValue) || !Number.isFinite(r.value)) return r;
+  const diff = r.value - proValue;
+  if (Math.abs(diff) <= tol) return { ...r, status: 'good', vsPro: diff };
+  const side = diff < 0 ? 'low' : 'high';
+  return { ...r, status: Math.abs(diff) > tol * 2 ? 'bad' : 'warn', severity: Math.abs(diff) / (tol * 4), side, advice: r.metric[side], vsPro: diff };
+}
+
 export function summarize(results) {
-  const scored = results.filter((r) => r.status !== 'na');
+  const scored = results.filter((r) => r.status in POINTS);
   const score = scored.length ? Math.round(scored.reduce((s, r) => s + POINTS[r.status], 0) / scored.length) : null;
   const priorities = results
     .filter((r) => (r.status === 'bad' || r.status === 'warn') && r.advice)
@@ -583,7 +605,7 @@ export function summarize(results) {
 }
 
 function countBy(results) {
-  const c = { good: 0, warn: 0, bad: 0, na: 0 };
+  const c = { good: 0, warn: 0, bad: 0, na: 0, ref: 0 };
   for (const r of results) c[r.status]++;
   return c;
 }

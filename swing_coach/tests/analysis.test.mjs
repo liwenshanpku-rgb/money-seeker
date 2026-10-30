@@ -32,7 +32,7 @@ for (const view of ['fo', 'dtl']) {
   for (const club of ['iron', 'driver']) {
     test(`职业模板自身全部达标（${view}, ${club}）`, () => {
       const { results } = run({ view, club, noise: 0 });
-      const bad = results.filter((r) => r.status !== 'good').map((r) => `${r.id}=${r.value}`);
+      const bad = results.filter((r) => r.status !== 'good' && !(r.status === 'ref' && r.value >= r.range[0] && r.value <= r.range[1])).map((r) => `${r.id}=${r.value}`);
       assert.deepEqual(bad, []);
       assert.equal(summarize(results).score, 100);
     });
@@ -87,10 +87,13 @@ for (const view of ['fo', 'dtl']) {
     Object.assign(table.P7, { hip: -8, shoulder: -15 });
     const { byId } = run({ view, table, noise: 0.001 });
     const id = (s) => `${view}_${s}`;
-    assert.equal(byId[id('p6_hipopen')].side, 'low', `p6_hipopen=${byId[id('p6_hipopen')].value}`);
-    assert.equal(byId[id('p6_sequence')].side, 'low', `p6_sequence=${byId[id('p6_sequence')].value}`);
+    // 转动类是「参考」指标：不按区间打分，这里检查数值确实低于职业区间
+    const below = (r) => r.value < r.range[0];
+    assert.ok(below(byId[id('p6_hipopen')]), `p6_hipopen=${byId[id('p6_hipopen')].value}`);
+    assert.ok(below(byId[id('p6_sequence')]), `p6_sequence=${byId[id('p6_sequence')].value}`);
     const p7 = view === 'fo' ? byId.fo_p7_hipturn : byId.dtl_p7_hipopen;
-    assert.equal(p7.side, 'low', `p7=${p7.value}`);
+    assert.ok(below(p7), `p7=${p7.value}`);
+    assert.equal(p7.status, 'ref');
   });
 }
 
@@ -106,7 +109,7 @@ test('有 3D 坐标时，正面斜着拍也能算出转动角度', () => {
     const { ctx, byId } = at({ yaw });
     assert.equal(ctx.oblique(), false);
     for (const id of ['fo_p4_shoulder', 'fo_p4_hip', 'fo_p7_hipturn']) {
-      assert.equal(byId[id].status, 'good', `${id} yaw ${yaw} = ${byId[id].value}`);
+      assert.ok(byId[id].value >= byId[id].range[0] && byId[id].value <= byId[id].range[1], `${id} yaw ${yaw} = ${byId[id].value}`);
       assert.ok(Math.abs(byId[id].value - square.byId[id].value) < 6, `${id} yaw ${yaw}: ${byId[id].value} vs ${square.byId[id].value}`);
     }
   }
@@ -140,4 +143,34 @@ test('侧面视角左右关键点被认反时，转动方向和大小不受影�
   const [fh, fsh, fh7] = val(flipped);
   assert.ok(h > 30 && sh > 60 && h7 > 25, `${h} ${sh} ${h7}`);
   assert.ok(Math.abs(fh - h) < 8 && Math.abs(fsh - sh) < 8 && Math.abs(fh7 - h7) < 8, `${fh} ${fsh} ${fh7} vs ${h} ${sh} ${h7}`);
+});
+
+test('参考类指标和职业球员对比：差距小算达标，差距大给出方向', async () => {
+  const { compareToPro } = await import('../web/js/metrics.js');
+  const s = syntheticSwing({ view: 'dtl', noise: 0.001 });
+  const det = detectPhases(s.frames, { view: 'dtl' });
+  const r = evaluate(makeContext(det.frames, det.P, { view: 'dtl', dir: det.dir, handed: 'right', club: 'iron' })).find((x) => x.id === 'dtl_p7_hipopen');
+  assert.equal(r.status, 'ref');
+  assert.equal(compareToPro(r, r.value + 5).status, 'good');
+  const far = compareToPro(r, r.value + 40);
+  assert.equal(far.status, 'bad');
+  assert.equal(far.side, 'low');
+  assert.ok(far.advice.issue.includes('髋部'));
+  assert.equal(compareToPro(r, NaN).status, 'ref');
+});
+
+test('Adam Scott 的骨架数据：P1–P10 顺序正确，主要非参考指标在职业区间内', async () => {
+  const fs = await import('node:fs');
+  globalThis.fetch = async (u) => ({ ok: true, json: async () => JSON.parse(fs.readFileSync(new URL(`../web/${u}`, import.meta.url))) });
+  const { loadProFrames, PROS } = await import('../web/js/pros.js');
+  const adam = PROS.find((p) => p.id === 'adam-scott');
+  for (const v of ['fo', 'dtl']) {
+    const d = await loadProFrames(adam.data[v]);
+    const order = POSITIONS.map((p) => d.P[p]);
+    assert.deepEqual([...order].sort((a, b) => a - b), order);
+    const det = detectPhases(d.frames, { view: v });
+    const results = evaluate(makeContext(det.frames, d.P, { view: v, dir: det.dir, handed: 'right', club: 'iron' }));
+    const bad = results.filter((r) => r.status === 'bad' && r.id !== 'tempo').map((r) => `${r.id}=${r.value}`);
+    assert.deepEqual(bad, [], `${v}: ${bad}`);
+  }
 });

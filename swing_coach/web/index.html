@@ -101,11 +101,16 @@
       </div>
 
       <div class="panel" id="proPanel">
-        <h2>对比职业球员 <small>选一位职业球员，对照看他们的正面、侧面慢动作</small></h2>
+        <h2>对比职业球员 <small>选一位职业球员：每个 P 位置左边是你、右边是他，检查表里逐项比数值</small></h2>
         <select id="proSelect"></select>
-        <p class="muted small" id="proNote"></p>
-        <div class="pro-videos" id="proVideos"></div>
-        <p class="muted small">视频来自 YouTube 公开视频，用官方播放器嵌入播放，版权归原作者。可在播放器设置（齿轮）里把播放速度调到 0.25 倍逐帧对照。</p>
+        <div id="proExtra">
+          <p class="muted small" id="proNote"></p>
+          <details class="pro-watch">
+            <summary>观看他的挥杆视频（YouTube）</summary>
+            <div class="pro-videos" id="proVideos"></div>
+            <p class="muted small">视频来自 YouTube 公开视频，用官方播放器嵌入播放，版权归原作者。可在播放器设置（齿轮）里把播放速度调到 0.25 倍。</p>
+          </details>
+        </div>
       </div>
 
       <div class="panel" id="friendPanel">
@@ -145,7 +150,7 @@
         <h2>P1–P10 逐位置对比
           <label class="toggle"><input type="checkbox" id="showTemplate" checked> 叠加职业模板</label>
         </h2>
-        <p class="legend"><i class="sw user"></i>你的动作 <i class="sw pro"></i>职业模板（按你的身高和站位对齐）</p>
+        <p class="legend"><i class="sw user"></i>你的动作 <i class="sw pro"></i>职业模板（按你的身高和站位对齐）<span id="proLegend"></span></p>
         <div class="positions" id="positions"></div>
       </div>
 

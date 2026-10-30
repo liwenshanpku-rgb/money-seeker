@@ -2,17 +2,17 @@
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases, detectView } from './phases.js';
-import { makeContext, evaluate, summarize, formatValue } from './metrics.js';
+import { makeContext, evaluate, summarize, formatValue, compareToPro } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
-  alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource,
+  alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource, COLORS,
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
 import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
-import { PROS, embedURL } from './pros.js';
+import { PROS, embedURL, loadProFrames } from './pros.js';
 
 const $ = (id) => document.getElementById(id);
-const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断' };
+const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断', ref: '参考' };
 const CLUB_TEXT = { iron: '铁杆', driver: '一号木' };
 
 const VIEWS = ['fo', 'dtl'];
@@ -136,7 +136,8 @@ function score(a) {
 
 // 所有角度合在一起的结果
 function combined() {
-  const results = analyses().flatMap((a) => a.results);
+  // 示例数据来自合成模板（没有识别误差），和真实识别出的职业数据不可比，参考类指标不做对比
+  const results = analyses().flatMap((a) => (a.demo ? a.results : a.results.map((r) => compareToPro(r, proNum(r)))));
   return { results, summary: summarize(results) };
 }
 
@@ -217,9 +218,10 @@ $('exitDemo').addEventListener('click', async () => {
 });
 
 // ---------- 渲染 ----------
-async function renderAll() {
+async function renderAll({ scroll = true } = {}) {
   const list = analyses();
   if (!list.length) return;
+  await loadSelectedPro();
   $('results').hidden = false;
   $('demoBanner').hidden = !isDemo();
   $('coach').disabled = false;
@@ -250,7 +252,7 @@ async function renderAll() {
       label: list.length > 1 ? `手部轨迹 · ${VIEW_SHORT[a.view]}` : undefined,
     });
   }
-  $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const opts = (a) => ({ view: a.view, club: a.settings.club, handed: a.settings.handed });
@@ -278,9 +280,9 @@ function renderSummary() {
       return [`上杆 / 下杆用时${multi() ? `（${VIEW_SHORT[a.view]}）` : ''}`, `${(t('P4') - t('P1')).toFixed(2)}s / ${(t('P7') - t('P4')).toFixed(2)}s`];
     }),
     ...(first.demo ? [['数据来源', '示例合成挥杆']] : []),
-    ['对比模板', '内置职业模板'],
+    ['对比模板', state.pro ? `内置职业模板 + ${state.pro.name}` : '内置职业模板'],
   ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
-  $('counts').innerHTML = ['good', 'warn', 'bad', 'na']
+  $('counts').innerHTML = ['good', 'warn', 'bad', 'na', 'ref'].filter((s) => s !== 'ref' || counts.ref)
     .map((s) => `<div><span class="chip ${s}">${STATUS_TEXT[s]}</span> ${counts[s]} 项</div>`).join('');
 }
 
@@ -294,7 +296,7 @@ function renderPriorities() {
   $('priorities').innerHTML = pr.map((r) => `
     <li>
       <b>${viewTag(r)}${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}</b> <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span>
-      <div class="detail">${r.metric.name}：${formatValue(r.metric, r.value)}（职业区间 ${fmtRange(r)}）。${r.advice.why}</div>
+      <div class="detail">${r.metric.name}：${formatValue(r.metric, r.value)}（${r.vsPro !== undefined ? `${state.pro.name} ${proValue(r)}，${vsProText(r)}` : `职业区间 ${fmtRange(r)}`}）。${r.advice.why}</div>
       <div class="drill"><b>怎么改：</b>${r.advice.fix}</div>
       <div class="drill"><b>练习：</b>${r.advice.drill}</div>
     </li>`).join('');
@@ -312,20 +314,24 @@ function fmtRange(r) {
 function renderTable() {
   const onlyIssues = $('onlyIssues').checked;
   const rows = combined().results.filter((r) => !onlyIssues || r.status === 'warn' || r.status === 'bad');
+  const proName = state.pro?.name;
   const note = (r) => (r.advice
-    ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
+    ? `${r.vsPro !== undefined ? `<b>${vsProText(r)}。</b>` : ''}<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
+    : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大，不计入评分。${isDemo() ? '示例数据不和职业球员对比。' : '在上面「对比职业球员」里选一位有骨架数据的球员，就能用同一方法和他比较。'}<details><summary>说明</summary>${r.metric.about}</details>`
+    : r.vsPro !== undefined ? `和 ${state.pro.name} 接近（${vsProText(r)}）。<details><summary>说明</summary>${r.metric.about}</details>`
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
     : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'
     : `<details><summary>说明</summary>${r.metric.about}</details>`);
   // 手机上每一行显示为一张小卡片（见 style.css），各单元格用 class 定位
   $('metricsTable').innerHTML = `
-    <thead><tr>${multi() ? '<th>视角</th>' : ''}<th>位置</th><th>检查项</th><th>你的数值</th><th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
+    <thead><tr>${multi() ? '<th>视角</th>' : ''}<th>位置</th><th>检查项</th><th>你的数值</th>${proName ? `<th>${proName}</th>` : ''}<th>职业区间</th><th>结果</th><th>说明与建议</th></tr></thead>
     <tbody>${rows.length ? rows.map((r) => `
       <tr class="row-${r.status}">
         ${multi() ? `<td class="c-view">${VIEW_SHORT[r.view]}</td>` : ''}
         <td class="c-pos">${multi() ? `<span class="tag m-only">${VIEW_SHORT[r.view]}</span>` : ''}${r.pos}</td>
         <td class="c-name">${r.metric.name}</td>
         <td class="num c-val"><span class="lbl">你的数值 </span>${formatValue(r.metric, r.value)}</td>
+        ${proName ? `<td class="num c-pro"><span class="lbl">${proName} </span>${proValue(r) ?? '—'}</td>` : ''}
         <td class="num c-range"><span class="lbl">职业区间 </span>${fmtRange(r)}</td>
         <td class="c-status"><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
         <td class="advice c-advice">${note(r)}</td>
@@ -339,9 +345,15 @@ async function renderPositions() {
   const box = $('positions');
   const byPos = combined().summary.byPos;
   box.innerHTML = '';
-  // 每张卡片：各角度的画面
-  const panes = list.map((a) => ({ a }));
+  // 每张卡片：各角度的画面；选了有骨架数据的职业球员时，同角度的职业动作紧挨在右边
+  const pro = state.pro;
+  const panes = [];
+  for (const a of list) {
+    panes.push({ a });
+    if (pro?.views[a.view]) panes.push({ a: pro.views[a.view], pro: true, mirror: pro.views[a.view].dir !== a.dir });
+  }
   box.classList.toggle('multi', panes.length > 1);
+  $('proLegend').textContent = pro ? `　·　每组右边绿色骨架是 ${pro.name} 的同一位置` : '';
   for (const pos of POSITIONS) {
     const card = document.createElement('div');
     card.className = 'pos-card';
@@ -357,11 +369,18 @@ async function renderPositions() {
     box.appendChild(card);
     const canvases = card.querySelectorAll('canvas');
     for (let i = 0; i < panes.length; i++) {
-      const { a } = panes[i];
-      await drawFrame(canvases[i], a.source, a.frames[a.P[pos]], a.crop, {
-        template: alignTemplate(pos, a.ref, opts(a)), showTemplate: show,
-        label: multi() ? `${VIEW_SHORT[a.view]} · ${pos}` : pos,
-      });
+      const { a, pro: isPro, mirror } = panes[i];
+      if (isPro) {
+        await drawFrame(canvases[i], a.source, mirrorFrame(a.frames[a.P[pos]], a.crop, mirror), a.crop, {
+          label: `${state.pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
+          color: COLORS.pro, joint: '#c9f5df',
+        });
+      } else {
+        await drawFrame(canvases[i], a.source, a.frames[a.P[pos]], a.crop, {
+          template: alignTemplate(pos, a.ref, opts(a)), showTemplate: show,
+          label: `${pro ? '你 · ' : ''}${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
+        });
+      }
     }
     card.dataset.pos = pos;
   }
@@ -369,22 +388,78 @@ async function renderPositions() {
 
 $('showTemplate').addEventListener('change', () => analyses().length && renderPositions());
 
-// ---------- 对比职业球员（嵌入 YouTube 视频） ----------
+// ---------- 对比职业球员：骨架数据逐位置左右对比 + 原视频 ----------
 const KEY_PRO = 'swingCoach.pro';
-$('proSelect').innerHTML = PROS.map((p) => `<option value="${p.id}">${p.name}（${p.tour}）</option>`).join('');
-$('proSelect').value = PROS.some((p) => p.id === store.get(KEY_PRO)) ? store.get(KEY_PRO) : PROS[0].id;
-$('proSelect').addEventListener('change', () => { store.set(KEY_PRO, $('proSelect').value); renderPros(); });
+$('proSelect').innerHTML = '<option value="">不对比</option>' + PROS.map((p) => `<option value="${p.id}">${p.name}（${p.tour}）${p.data ? '' : ' · 仅视频'}</option>`).join('');
+{
+  const saved = store.get(KEY_PRO);
+  $('proSelect').value = saved === '' || PROS.some((p) => p.id === saved) ? saved : (PROS.find((p) => p.data) || PROS[0]).id;
+}
+$('proSelect').addEventListener('change', async () => {
+  store.set(KEY_PRO, $('proSelect').value);
+  if (analyses().length) await renderAll({ scroll: false });
+});
+
+// 把职业球员的骨架数据当作一次「分析」：用数据里人工核对过的 P1–P10，指标用同一套算法
+async function loadSelectedPro() {
+  const info = PROS.find((p) => p.id === $('proSelect').value);
+  if (!info?.data) { state.pro = null; return; }
+  if (state.pro?.id === info.id) return;
+  const views = {};
+  for (const v of VIEWS) {
+    if (!info.data[v]) continue;
+    const d = await loadProFrames(info.data[v]);
+    const a = analyzeFrames(d.frames, { handed: d.handed, club: d.club, view: v }, { aspect: d.aspect, pro: true });
+    a.P = { ...d.P };
+    score(a);
+    const ankle = (POSITIONS.map((p) => a.frames[a.P[p]].lm)).flatMap((lm) => [lm[27].y, lm[28].y]);
+    a.source = blankSource(Math.max(...ankle) + 0.01);
+    a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect);
+    views[v] = a;
+  }
+  state.pro = { id: info.id, name: info.name, views };
+}
+
+// 职业球员和用户朝向不同时（左手球员、相机在另一侧）水平翻转骨架
+function mirrorFrame(frame, crop, mirror) {
+  if (!mirror) return frame;
+  const cx = crop.x + crop.w / 2;
+  return { ...frame, lm: frame.lm.map((p) => ({ ...p, x: 2 * cx - p.x })) };
+}
+
+function proResult(r) {
+  const a = state.pro?.views[r.view];
+  if (!a || r.id === 'tempo') return null; // 职业视频可能经过剪辑变速，节奏不作对比
+  return a.results.find((x) => x.id === r.id) || null;
+}
+function proNum(r) { return proResult(r)?.value ?? NaN; }
+function proValue(r) {
+  const p = proResult(r);
+  return p && Number.isFinite(p.value) ? formatValue(p.metric, p.value) : null;
+}
+// 和职业球员对比的说明，如「比 Adam Scott 少 25°」
+function vsProText(r) {
+  if (r.vsPro === undefined || !state.pro) return '';
+  const d = r.vsPro;
+  const unit = r.metric.unit === '°' ? '°' : ` ${r.metric.unit}`;
+  return `比 ${state.pro.name} ${d < 0 ? '少' : '多'} ${Math.abs(d).toFixed(r.metric.digits)}${unit}`;
+}
 
 // 和你上传的角度相同的视频排在前面
 function renderPros() {
-  const pro = PROS.find((p) => p.id === $('proSelect').value) || PROS[0];
+  const info = PROS.find((p) => p.id === $('proSelect').value);
+  $('proExtra').hidden = !info;
+  if (!info) return;
   const mine = analyses().map((a) => a.view);
   const order = [...VIEWS].sort((x, y) => mine.includes(y) - mine.includes(x));
-  $('proNote').textContent = pro.note;
-  $('proVideos').innerHTML = order.filter((v) => pro[v]).map((v) => `
+  const missing = mine.filter((v) => !info.data?.[v]);
+  $('proNote').textContent = info.note + (info.data
+    ? (missing.length ? `（暂无${missing.map((v) => VIEW_SHORT[v]).join('、')}骨架数据）` : ' 下面每个 P 位置的右边就是他的同一位置。')
+    : ' 这位球员的骨架数据还没有，暂时只能看视频。');
+  $('proVideos').innerHTML = order.filter((v) => info[v]).map((v) => `
     <div class="pro-video">
-      <b>${pro.name} · ${VIEW_SHORT[v]}${mine.includes(v) ? '<span class="tag">对应你的视频</span>' : ''}</b>
-      <div class="frame"><iframe src="${embedURL(pro[v])}" title="${pro.name} ${VIEW_SHORT[v]}挥杆" loading="lazy"
+      <b>${info.name} · ${VIEW_SHORT[v]}${mine.includes(v) ? '<span class="tag">对应你的视频</span>' : ''}</b>
+      <div class="frame"><iframe src="${embedURL(info[v])}" title="${info.name} ${VIEW_SHORT[v]}挥杆" loading="lazy"
         allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
     </div>`).join('');
 }
@@ -501,6 +576,7 @@ function coachData(withVideo) {
     metrics: results.map((r) => ({
       view: VIEW_SHORT[r.view], pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
       status: r.status, issue: r.advice?.issue ?? null,
+      pro_value: proValue(r) ? `${state.pro.name} ${proValue(r)}` : null,
     })),
   };
 }

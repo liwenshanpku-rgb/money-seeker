@@ -71,13 +71,7 @@
       <div class="actions">
         <button class="primary" id="analyze" disabled>开始分析</button>
         <button id="demo">用示例挥杆体验</button>
-        <label class="pro-upload">
-          <input type="file" id="proFile" accept="video/*" hidden>
-          <span class="link">＋ 上传职业球员视频作为对比模板（可选）</span>
-        </label>
-        <span class="pro-status" id="proStatus"></span>
       </div>
-      <video id="proVideo" playsinline muted preload="auto" hidden></video>
 
       <div class="progress" id="progress" hidden>
         <div class="bar"><div id="bar"></div></div>
@@ -100,6 +94,14 @@
       <div class="panel">
         <h2>最需要改进的 3 点</h2>
         <ol class="priorities" id="priorities"></ol>
+      </div>
+
+      <div class="panel" id="proPanel">
+        <h2>对比职业球员 <small>选一位职业球员，对照看他们的正面、侧面慢动作</small></h2>
+        <select id="proSelect"></select>
+        <p class="muted small" id="proNote"></p>
+        <div class="pro-videos" id="proVideos"></div>
+        <p class="muted small">视频来自 YouTube 公开视频，用官方播放器嵌入播放，版权归原作者。可在播放器设置（齿轮）里把播放速度调到 0.25 倍逐帧对照。</p>
       </div>
 
       <div class="panel" id="friendPanel">

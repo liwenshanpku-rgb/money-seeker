@@ -218,10 +218,13 @@ $('exitDemo').addEventListener('click', async () => {
 });
 
 // ---------- 渲染 ----------
+let renderRun = 0;
 async function renderAll({ scroll = true } = {}) {
+  const run = ++renderRun;
   const list = analyses();
   if (!list.length) return;
   await loadSelectedPro();
+  if (run !== renderRun) return;
   $('results').hidden = false;
   $('demoBanner').hidden = !isDemo();
   $('coach').disabled = false;
@@ -244,6 +247,7 @@ async function renderAll({ scroll = true } = {}) {
   const paths = $('paths');
   paths.innerHTML = '';
   for (const a of list) {
+    if (run !== renderRun) return;
     const c = document.createElement('canvas');
     c.width = 560; c.height = 560;
     paths.appendChild(c);
@@ -339,7 +343,10 @@ function renderTable() {
 }
 $('onlyIssues').addEventListener('change', () => analyses().length && renderTable());
 
+let positionsRun = 0;
 async function renderPositions() {
+  // 切换球员等操作会在上一次渲染还没画完时重新渲染；旧的那次发现自己过期就停下，避免往新列表里插卡片
+  const run = ++positionsRun;
   const list = analyses();
   const show = $('showTemplate').checked;
   const box = $('positions');
@@ -367,13 +374,14 @@ async function renderPositions() {
         <div class="muted" style="font-size:12.5px">${POSITION_INFO[pos].desc}</div>
         <ul>${items.map((r) => `<li><span>${viewTag(r)}${r.metric.name}</span><span>${formatValue(r.metric, r.value)} <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></span></li>`).join('')}</ul>
       </div>`;
+    if (run !== positionsRun) return;
     box.appendChild(card);
     const canvases = card.querySelectorAll('canvas');
     for (let i = 0; i < panes.length; i++) {
       const { a, pro: isPro, mirror } = panes[i];
       if (isPro) {
         await drawFrame(canvases[i], mirror ? a.sourceMirror : a.source, mirrorFrame(a.frames[a.P[pos]], a.crop, mirror), a.crop, {
-          label: `${state.pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
+          label: `${pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
           color: COLORS.pro, joint: '#c9f5df',
         });
       } else {

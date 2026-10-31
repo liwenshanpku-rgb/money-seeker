@@ -7,7 +7,10 @@ export const PROS = [
     note: '公认最优美的挥杆之一：上杆宽、顶点稳定，下杆顺序非常清楚。',
     fo: 'y-unlrE7gd8', dtl: 'p7we9OPqT10',
     // 骨架数据（只有关键点坐标，不含画面），由 tools/extract_pro.mjs 从挥杆视频中提取
-    data: { iron: { fo: 'pros/adam-scott-fo.json', dtl: 'pros/adam-scott-dtl.json' } },
+    data: {
+      iron: { fo: 'pros/adam-scott-fo.json', dtl: 'pros/adam-scott-dtl.json' },
+      driver: { fo: 'pros/adam-scott-driver-fo.json', dtl: 'pros/adam-scott-driver-dtl.json' },
+    },
   },
   {
     id: 'tommy-fleetwood', name: 'Tommy Fleetwood', tour: 'PGA / DP World 巡回赛',
@@ -19,11 +22,13 @@ export const PROS = [
     id: 'nelly-korda', name: 'Nelly Korda', tour: 'LPGA',
     note: '准备姿势扎实，下杆先向前移再转髋，收杆平衡。',
     fo: 'JXvjacjuR2s', dtl: 'Gtb1kiQ1mFo',
+    data: { iron: { dtl: 'pros/nelly-korda-dtl.json' } }, // 正面视频里球童挡在她身后，识别不可靠，暂只用侧面
   },
   {
     id: 'jeeno-thitikul', name: 'Jeeno Thitikul', tour: 'LPGA',
     note: '身材不高但非常高效：上杆紧凑，下半身带动转髋，力量来自地面。',
     fo: 'S-ZIus0Tt7U', dtl: 'gAvftC79qzM',
+    data: { driver: { dtl: 'pros/jeeno-thitikul-driver-dtl.json' } },
   },
 ];
 

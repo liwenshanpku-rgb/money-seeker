@@ -318,7 +318,7 @@ export const METRICS = [
     id: 'fo_p7_hands', view: 'fo', pos: 'P7', name: '击球时手领先（杆身前倾）', unit: '× 站宽', digits: 2,
     points: ['leadWrist', 'trailWrist'],
     value: (c) => c.toTarget(c.B('P7').hands, c.b1.hands),
-    range: { iron: [0.02, 0.35], driver: [-0.06, 0.25] },
+    range: { iron: [0.02, 0.55], driver: [-0.06, 0.55] },
     about: '击球时双手相对准备位置向目标侧领先的程度。铁杆击球时双手应在球前方，形成杆身前倾。',
     low: { issue: '击球时手落后（翻腕/挑球）', why: '过早释放手腕，杆身后倾，失去压缩、距离和方向都不稳。', fix: '下杆保持手腕角度更久，让身体转动带手通过击球区，击球时双手在前大腿前方。', drill: '「推杆袋」练习：杆头顶住一个装满毛巾的袋子，保持手在杆头前方推动它。' },
     high: { issue: '手领先过多', why: '杆面容易打开、出右，或杆身前倾过大打低。', fix: '让杆头自然释放，击球时双手在前大腿内侧即可。', drill: '半挥杆练习，感受杆头与双手同时到达击球位置。' },

@@ -322,7 +322,7 @@ function renderTable() {
   const proName = state.pro?.name;
   const note = (r) => (r.advice
     ? `${r.vsPro !== undefined ? `<b>${vsProText(r)}。</b>` : ''}<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
-    : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大，不计入评分。${isDemo() ? '示例数据不和职业球员对比。' : '在上面「对比职业球员」里选一位有骨架数据的球员，就能用同一方法和他比较。'}<details><summary>说明</summary>${r.metric.about}</details>`
+    : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大，不计入评分。${isDemo() ? '示例数据不和职业球员对比。' : '在上面「对比职业球员」里选一位有骨架数据的球员，就能用同一方法和这位球员比较。'}<details><summary>说明</summary>${r.metric.about}</details>`
     : r.vsPro !== undefined ? `和 ${state.pro.name} 接近（${vsProText(r)}）。<details><summary>说明</summary>${r.metric.about}</details>`
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
     : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'

@@ -39,8 +39,10 @@ export function templateHandPath(ref, opts, steps = 120) {
   return out;
 }
 
-// 所有关键帧共用的裁剪框（单位：视频高度）
-export function cropBox(frameList, aspect, pad = 0.18) {
+// 所有关键帧共用的裁剪框（单位：视频高度）：紧贴人的全身，只留少量边距，并按画布比例（宽/高）补齐，
+// 这样你和职业球员的画面里人占的比例一致，方便对比。头顶留得多一点（关键点只到鼻子）。
+export const CARD_RATIO = 360 / 420;
+export function cropBox(frameList, aspect, { ratio = CARD_RATIO, pad = 0.06, headroom = 0.12 } = {}) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const lm of frameList) {
     for (const p of lm) {
@@ -49,14 +51,15 @@ export function cropBox(frameList, aspect, pad = 0.18) {
       y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
     }
   }
-  const h = (y1 - y0) * (1 + pad * 2);
-  const w = Math.max(x1 - x0, h * 0.75) * (1 + pad);
+  const bodyH = y1 - y0;
+  y0 -= bodyH * headroom;
+  y1 += bodyH * pad * 0.6;
+  let h = y1 - y0;
+  let w = (x1 - x0) + bodyH * pad * 2;
+  // 按画布比例补齐较短的一边，人居中
+  if (w / h < ratio) w = h * ratio; else h = w / ratio;
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  const side = Math.max(w, h);
-  return {
-    x: Math.max(0, cx - side / 2), y: Math.max(0, cy - side / 2),
-    w: Math.min(aspect, side), h: Math.min(1, side),
-  };
+  return { x: cx - w / 2, y: cy - h / 2, w, h };
 }
 
 export function drawSkeleton(ctx, lm, toPx, { color, joint, width = 3, dash = null, alpha = 1, minVis = 0.3 }) {

@@ -232,8 +232,9 @@ async function renderAll({ scroll = true } = {}) {
   $('sharePanel').hidden = true;
   $('cardPanel').hidden = true;
   for (const a of list) {
-    a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm).concat(
-      POSITIONS.map((p) => alignTemplate(p, a.ref, opts(a)).landmarks)), a.aspect);
+    // 关键帧：紧贴人裁剪；手部轨迹：正方形，把上杆顶点和收杆时高举的双手也包进来
+    a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect);
+    a.pathCrop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect, { ratio: 1, pad: 0.1 });
   }
   const warnings = list.map((a) => a.viewWarning).filter(Boolean);
   if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
@@ -251,7 +252,7 @@ async function renderAll({ scroll = true } = {}) {
     const c = document.createElement('canvas');
     c.width = 560; c.height = 560;
     paths.appendChild(c);
-    await drawHandPath(c, a.source, a.frames, a.P, a.crop, {
+    await drawHandPath(c, a.source, a.frames, a.P, a.pathCrop, {
       handed: a.settings.handed, templatePath: templateHandPath(a.ref, opts(a)),
       label: list.length > 1 ? `手部轨迹 · ${VIEW_SHORT[a.view]}` : undefined,
     });
@@ -358,6 +359,7 @@ async function renderPositions() {
   for (const a of list) {
     panes.push({ a });
     if (pro?.views[a.view]) panes.push({ a: pro.views[a.view], pro: true, mirror: pro.views[a.view].dir !== a.dir });
+    else if (pro) panes.push({ a, empty: true }); // 占位，保持「你 | 他」一一对应
   }
   box.classList.toggle('multi', panes.length > 1);
   const credit = pro && Object.values(pro.views).map((a) => a.credit).find(Boolean);
@@ -378,8 +380,14 @@ async function renderPositions() {
     box.appendChild(card);
     const canvases = card.querySelectorAll('canvas');
     for (let i = 0; i < panes.length; i++) {
-      const { a, pro: isPro, mirror } = panes[i];
-      if (isPro) {
+      const { a, pro: isPro, mirror, empty } = panes[i];
+      if (empty) {
+        const g = canvases[i].getContext('2d');
+        g.fillStyle = '#0d1512'; g.fillRect(0, 0, canvases[i].width, canvases[i].height);
+        g.fillStyle = '#93a39a'; g.font = '600 18px system-ui, sans-serif'; g.textAlign = 'center';
+        g.fillText(`暂无 ${pro.name}`, canvases[i].width / 2, canvases[i].height / 2 - 12);
+        g.fillText(`${VIEW_SHORT[a.view]}数据`, canvases[i].width / 2, canvases[i].height / 2 + 16);
+      } else if (isPro) {
         await drawFrame(canvases[i], mirror ? a.sourceMirror : a.source, mirrorFrame(a.frames[a.P[pos]], a.crop, mirror), a.crop, {
           label: `${pro.name} · ${multi() ? VIEW_SHORT[a.view] + ' ' : ''}${pos}`,
           color: COLORS.pro, joint: '#c9f5df',

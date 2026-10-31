@@ -145,8 +145,11 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .assign { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .assign select { width: auto; }
 
-.legend { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin: -4px 0 12px; }
-.sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-left: 8px; }
+.legend { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: -4px 0 12px; }
+.legend > span { white-space: nowrap; }
+.legend #proLegend { flex-basis: 100%; white-space: normal; }
+.legend #proLegend:empty { display: none; }
+.sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin: 0 6px 3px 0; vertical-align: middle; }
 .sw.user { background: var(--user); }
 .sw.pro { background: repeating-linear-gradient(90deg, var(--pro) 0 6px, transparent 6px 9px); }
 .toggle { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: auto; display: flex; gap: 6px; align-items: center; }

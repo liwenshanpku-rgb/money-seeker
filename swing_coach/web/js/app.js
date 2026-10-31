@@ -364,7 +364,7 @@ async function renderPositions() {
   box.classList.toggle('multi', panes.length > 1);
   const credit = pro && [...new Set(Object.values(pro.views).map((a) => a.credit).filter(Boolean))]
     .map((c, i) => (i ? c.replace('画面来源：', '') : c)).join('、');
-  $('proLegend').textContent = pro ? `　·　每组右边是 ${pro.name} 的同一位置（绿色骨架）${credit ? `，${credit}` : ''}` : '';
+  $('proLegend').textContent = pro ? `每组右边是 ${pro.name} 的同一位置（绿色骨架）${credit ? `，${credit}` : ''}` : '';
   for (const pos of POSITIONS) {
     const card = document.createElement('div');
     card.className = 'pos-card';

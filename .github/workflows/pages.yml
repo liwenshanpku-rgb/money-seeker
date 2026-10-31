@@ -26,6 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stamp version
+        # 给脚本、样式、数据的地址加上提交号，避免手机浏览器 / 主屏幕 App 用旧缓存
+        run: sed -i "s/__VERSION__/${GITHUB_SHA::8}/g" swing_coach/web/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: swing_coach/web

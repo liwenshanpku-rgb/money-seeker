@@ -9,7 +9,7 @@ import {
 } from './render.js';
 import { GitHubCoach, guessRepo, store } from './github.js';
 import { buildShareText, montage, canvasToBlob, copyText, resultCard } from './share.js';
-import { PROS, embedURL, loadProFrames, pickProData, CLUB_NAME } from './pros.js';
+import { PROS, embedURL, loadProFrames, pickProData, CLUB_NAME, versioned } from './pros.js';
 
 const $ = (id) => document.getElementById(id);
 const STATUS_TEXT = { good: '达标', warn: '接近', bad: '需改进', na: '无法判断', ref: '参考' };
@@ -435,7 +435,7 @@ async function loadSelectedPro() {
     a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect);
     if (d.images) {
       // 有原画面：各 P 位置的截图（只在用到时下载）
-      const byTime = new Map(Object.entries(d.images).map(([pos, url]) => [a.frames[d.P[pos]].t, url]));
+      const byTime = new Map(Object.entries(d.images).map(([pos, url]) => [a.frames[d.P[pos]].t, versioned(url)]));
       a.source = imageSource(byTime);
       a.sourceMirror = imageSource(byTime, { mirror: true });
       a.credit = d.imageCredit;
@@ -672,7 +672,7 @@ $('prepareShare').addEventListener('click', async () => {
   $('prepareShare').disabled = true;
   $('shareStatus').textContent = '';
   try {
-    coachPrompt ||= await fetch('coach-prompt.md').then((r) => { if (!r.ok) throw new Error('读取提示词失败'); return r.text(); });
+    coachPrompt ||= await fetch(versioned('coach-prompt.md')).then((r) => { if (!r.ok) throw new Error('读取提示词失败'); return r.text(); });
     const withVideo = $('shareFrames').checked && !isDemo();
     const big = montage((await keyframeCanvases(withVideo, { width: 360, height: 420, labelSize: 22 })).map((k) => k.canvas));
     const blob = await canvasToBlob(big);

@@ -206,8 +206,8 @@ export function templatePose(position, { view = 'fo', club = 'iron', handed = 'r
 }
 
 // ---------- 合成挥杆（演示与测试用） ----------
-// 节奏：上杆 : 下杆 ≈ 3 : 1（职业球员典型节奏）
-export const PRO_TIMING = { P1: 0, P2: 0.27, P3: 0.55, P4: 0.84, P5: 0.98, P6: 1.05, P7: 1.12, P8: 1.2, P9: 1.32, P10: 1.75 };
+// 节奏：上杆 : 下杆 ≈ 3 : 1（职业球员典型节奏；下杆从双手开始下落算起，顶点的减速转换算在上杆里）
+export const PRO_TIMING = { P1: 0, P2: 0.27, P3: 0.55, P4: 0.79, P5: 0.98, P6: 1.05, P7: 1.12, P8: 1.2, P9: 1.32, P10: 1.75 };
 
 function lerpParams(a, b, f) {
   const o = {};

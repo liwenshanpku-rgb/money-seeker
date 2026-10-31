@@ -66,7 +66,7 @@ test('侧面：识别提前伸展（臀部顶向球、起身）', () => {
 test('节奏：上杆过快时提示', () => {
   const timing = { P1: 0, P2: 0.1, P3: 0.2, P4: 0.32, P5: 0.46, P6: 0.53, P7: 0.6, P8: 0.68, P9: 0.8, P10: 1.2 };
   const { byId } = run({ timing });
-  assert.ok(byId.tempo.value < 2);
+  assert.ok(byId.tempo.value < 2.4, String(byId.tempo.value));
   assert.equal(byId.tempo.side, 'low');
 });
 

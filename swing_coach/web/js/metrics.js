@@ -115,6 +115,25 @@ export function makeContext(frames, P, { view, dir, handed, club }) {
     // 正面相机斜拍时，髋、肩转动都无法估算
     oblique: () => !!(ctx.series('hip').oblique || ctx.series('shoulder').oblique),
     rot: (kind, pos) => (ctx.oblique() ? NaN : ctx.series(kind)[P[pos]]),
+    // 上杆顶点的转动：取 P3 到下杆开始之间的最大值（先做 3 帧中值，去掉单帧跳变）。
+    // 双手到顶后肩、髋往往还在继续转，只看双手最高那一帧会偏小。
+    topRot: (kind) => {
+      if (ctx.oblique()) return NaN;
+      const s = ctx.series(kind), end = ctx.transition();
+      const med = (i) => [s[i - 1], s[i], s[i + 1]].sort((a, b) => a - b)[1];
+      let best = -Infinity;
+      for (let i = Math.max(P.P3, 1); i <= end && i < s.length - 1; i++) best = Math.max(best, med(i));
+      return best;
+    },
+    // 下杆真正开始的帧：双手从最高点下降超过挥杆高度的 6%。很多人双手到顶后杆头还在继续上行
+    //（手腕继续屈），按双手最高点算会把这段时间算进下杆，节奏比偏低。
+    transition: () => {
+      const y = (i) => body(frames[i].lm, handed).hands.y;
+      const top = y(P.P4), h = y(P.P7) - top;
+      let i = P.P4;
+      while (i < P.P7 - 1 && y(i + 1) - top < 0.06 * h) i++;
+      return i;
+    },
   };
   return ctx;
 }
@@ -182,7 +201,7 @@ export const METRICS = [
     rotation: true,
     ref: true,
     points: ['leadShoulder', 'trailShoulder'],
-    value: (c) => c.rot('shoulder', 'P4'),
+    value: (c) => c.topRot('shoulder'),
     range: { iron: [72, 115], driver: [78, 120] },
     about: '上杆顶点肩部绕脊柱转过的角度（由 3D 关键点估算），职业球员约 90°。',
     low: { issue: '肩部转动不足', why: '上杆蓄力不够，容易靠手臂发力、出现由外向内的下杆路径。', fix: '上杆到顶时让前肩转到下巴下方、背部对着目标。', drill: '双臂交叉抱胸，做转体练习，直到背部正对目标；再带杆做同样的感觉。' },
@@ -193,7 +212,7 @@ export const METRICS = [
     rotation: true,
     ref: true,
     points: ['leadHip', 'trailHip'],
-    value: (c) => c.rot('hip', 'P4'),
+    value: (c) => c.topRot('hip'),
     range: { iron: [28, 62], driver: [30, 65] },
     about: '上杆顶点髋部转过的角度（由 3D 关键点估算），职业球员约 45°；肩髋转动差（X-factor）是下杆力量来源。',
     low: { issue: '髋部转动不足', why: '柔韧性不足或刻意锁住下半身，肩部也难以转到位，容易受伤。', fix: '允许前膝向内、后髋向后转，让髋部跟随上身转动。', drill: '双手抱杆在胸前做上杆转体，让前膝指向球的后方。' },
@@ -434,7 +453,7 @@ export const METRICS = [
     rotation: true,
     ref: true,
     points: ['leadHip', 'trailHip'],
-    value: (c) => c.rot('hip', 'P4'),
+    value: (c) => c.topRot('hip'),
     range: { iron: [28, 65], driver: [30, 68] },
     about: '上杆顶点髋部转过的角度（由 3D 关键点估算），职业球员约 45°。',
     low: { issue: '上杆髋部转动不足', why: '下半身锁住，肩部也转不到位，上杆只能靠手臂抬杆，容易站起来或上杆过快。', fix: '上杆时允许后髋向后转（朝自己身后），前膝向内指向球的后方。', drill: '双手抱杆在胸前做上杆转体，转到后侧口袋朝向身后的目标线，3 组 × 10 次。' },
@@ -445,7 +464,7 @@ export const METRICS = [
     rotation: true,
     ref: true,
     points: ['leadShoulder', 'trailShoulder'],
-    value: (c) => c.rot('shoulder', 'P4'),
+    value: (c) => c.topRot('shoulder'),
     range: { iron: [72, 115], driver: [78, 120] },
     about: '上杆顶点肩部绕脊柱转过的角度（由 3D 关键点估算），职业球员约 90°。',
     low: { issue: '上杆肩部转动不足', why: '蓄力不够，下杆容易用手臂发力、由外向内。', fix: '上杆到顶时前肩转到下巴下方，背部对着目标。', drill: '双臂交叉抱胸做转体，直到背部正对目标；再带杆做同样的感觉。' },
@@ -534,9 +553,9 @@ export const METRICS = [
   {
     id: 'tempo', view: 'any', pos: 'P4', name: '挥杆节奏（上杆 : 下杆）', unit: ': 1', digits: 1,
     points: [],
-    value: (c) => (c.t('P4') - c.t('P1')) / Math.max(1e-6, c.t('P7') - c.t('P4')),
+    value: (c) => { const tt = c.frames[c.transition()].t; return (tt - c.t('P1')) / Math.max(1e-6, c.t('P7') - tt); },
     range: { iron: [2.4, 3.8], driver: [2.4, 3.8] },
-    about: '上杆时间与下杆时间之比。职业球员非常稳定地接近 3 : 1（Tour Tempo 研究）。需要 60fps 以上视频才较准确。',
+    about: '上杆时间与下杆时间之比，下杆从双手开始明显下落算起（顶点停顿算在上杆里）。职业球员非常稳定地接近 3 : 1（Tour Tempo 研究）。需要 60fps 以上视频才较准确。',
     low: { issue: '上杆太快 / 节奏急促', why: '上杆过急会打乱转换时机，常伴随从上往下砍球。', fix: '上杆放慢，在顶点完成转体后再开始下杆。', drill: '跟着节拍器或口令「一——二——三，打」挥杆，上杆三拍、下杆一拍。' },
     high: { issue: '上杆过慢 / 下杆不够果断', why: '下杆加速不足或顶点停顿过长，丢失弹性与速度。', fix: '保持上杆流畅，转换时果断加速。', drill: '用节拍器 3:1 节奏练习空挥，逐步加快整体速度。' },
   },

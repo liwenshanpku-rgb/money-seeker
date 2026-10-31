@@ -38,10 +38,14 @@ export function embedURL(videoId) {
 
 const cache = new Map();
 
+// 数据和截图也带上发布版本号，更新后不会读到旧缓存
+const VERSION = document.documentElement.dataset.version || '';
+export const versioned = (url) => (VERSION && !VERSION.startsWith('__') ? `${url}?v=${VERSION}` : url);
+
 // 读取职业球员某个角度的骨架数据，补全成 33 个关键点的逐帧数组
 export async function loadProFrames(url) {
   if (!cache.has(url)) {
-    cache.set(url, fetch(url).then((r) => {
+    cache.set(url, fetch(versioned(url)).then((r) => {
       if (!r.ok) throw new Error(`读取职业球员数据失败：${url}`);
       return r.json();
     }).then((d) => {

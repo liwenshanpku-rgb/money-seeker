@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-version="__VERSION__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="apple-mobile-web-app-title" content="挥杆教练">
   <meta name="theme-color" content="#127a4a">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=__VERSION__">
 </head>
 <body>
   <header class="top">
@@ -220,6 +220,23 @@
 
   <footer class="wrap muted">姿态识别：MediaPipe Pose（在浏览器本地运行）。职业模板为 P1–P10 位置的典型职业参数，不代表某位具体球员。</footer>
 
-  <script type="module" src="js/app.js"></script>
+  <!-- 发布时 __VERSION__ 会被替换成提交号：每次更新后浏览器（包括添加到主屏幕的 App）都会取到最新的脚本，不会用旧缓存 -->
+  <script type="importmap">
+  {
+    "imports": {
+      "./js/app.js": "./js/app.js?v=__VERSION__",
+      "./js/geometry.js": "./js/geometry.js?v=__VERSION__",
+      "./js/github.js": "./js/github.js?v=__VERSION__",
+      "./js/metrics.js": "./js/metrics.js?v=__VERSION__",
+      "./js/phases.js": "./js/phases.js?v=__VERSION__",
+      "./js/pose.js": "./js/pose.js?v=__VERSION__",
+      "./js/pros.js": "./js/pros.js?v=__VERSION__",
+      "./js/render.js": "./js/render.js?v=__VERSION__",
+      "./js/share.js": "./js/share.js?v=__VERSION__",
+      "./js/template.js": "./js/template.js?v=__VERSION__"
+    }
+  }
+  </script>
+  <script type="module" src="js/app.js?v=__VERSION__"></script>
 </body>
 </html>

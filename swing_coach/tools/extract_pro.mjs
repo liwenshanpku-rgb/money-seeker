@@ -3,6 +3,7 @@
 //
 // 用法：node swing_coach/tools/extract_pro.mjs <视频文件> <输出 json> --view fo|dtl [--name "Adam Scott"] [--fps 30]
 //        [--start 秒] [--end 秒] [--P '{"P1":12}']   （--P 可手动修正自动识别的位置，按帧序号）
+//        [--model full|heavy]  识别模型（默认 full）
 //        [--slow 15]   慢动作视频的放慢倍数：时间换算回真实速度，P 位置检测和节奏才准
 
 import http from 'node:http';
@@ -28,6 +29,7 @@ const start = Number(opt('start', 0));
 const end = opt('end') ? Number(opt('end')) : undefined;
 const manualP = opt('P') ? JSON.parse(opt('P')) : {};
 const slow = Number(opt('slow', 1));
+const model = opt('model', 'full');
 
 // 只保存用到的关键点：鼻子、肩肘腕、髋膝踝、脚跟脚尖
 export const KEEP = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
@@ -47,16 +49,16 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const page = await browser.newPage();
 await page.goto(`${base}/index.html`);
-const result = await page.evaluate(async ({ fps, start, end }) => {
+const result = await page.evaluate(async ({ fps, start, end, model }) => {
   const blob = await (await fetch('/__video')).blob();
   const v = document.createElement('video');
   v.muted = true; v.playsInline = true; v.src = URL.createObjectURL(blob);
   await new Promise((r) => { v.onloadeddata = r; });
   const { extractPoses, fillMissing } = await import('/js/pose.js');
-  const { frames, aspect } = await extractPoses(v, { fps, start, end, snapshots: false });
+  const { frames, aspect } = await extractPoses(v, { fps, start, end, model, snapshots: false });
   const { frames: filled, missingRatio } = fillMissing(frames);
   return { frames: filled.map((f) => ({ t: f.t, lm: f.lm, wl: f.wl })), aspect, missingRatio };
-}, { fps, start, end });
+}, { fps, start, end, model });
 await browser.close();
 server.close();
 

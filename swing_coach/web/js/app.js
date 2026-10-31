@@ -362,7 +362,8 @@ async function renderPositions() {
     else if (pro) panes.push({ a, empty: true }); // 占位，保持「你 | 他」一一对应
   }
   box.classList.toggle('multi', panes.length > 1);
-  const credit = pro && Object.values(pro.views).map((a) => a.credit).find(Boolean);
+  const credit = pro && [...new Set(Object.values(pro.views).map((a) => a.credit).filter(Boolean))]
+    .map((c, i) => (i ? c.replace('画面来源：', '') : c)).join('、');
   $('proLegend').textContent = pro ? `　·　每组右边是 ${pro.name} 的同一位置（绿色骨架）${credit ? `，${credit}` : ''}` : '';
   for (const pos of POSITIONS) {
     const card = document.createElement('div');
@@ -482,8 +483,8 @@ function renderPros() {
   const pick = pickProData(info, analyses()[0]?.settings.club || $('club').value);
   const missing = pick ? mine.filter((v) => !pick.files[v]) : [];
   $('proNote').textContent = info.note + (pick
-    ? `${pick.fallback ? `（他还没有${CLUB_NAME[analyses()[0]?.settings.club] || ''}数据，用的是${CLUB_NAME[pick.club]}挥杆）` : `（${CLUB_NAME[pick.club]}挥杆）`}`
-      + (missing.length ? `暂无${missing.map((v) => VIEW_SHORT[v]).join('、')}数据。` : ' 下面每个 P 位置的右边就是他的同一位置。')
+    ? `${pick.fallback ? `（这位球员还没有${CLUB_NAME[analyses()[0]?.settings.club] || ''}数据，用的是${CLUB_NAME[pick.club]}挥杆）` : `（${CLUB_NAME[pick.club]}挥杆）`}`
+      + (missing.length ? `暂无${missing.map((v) => VIEW_SHORT[v]).join('、')}数据。` : ' 下面每个 P 位置的右边就是这位球员的同一位置。')
     : ' 这位球员的骨架数据还没有，暂时只能看视频。');
   $('proVideos').innerHTML = order.filter((v) => info[v]).map((v) => `
     <div class="pro-video">

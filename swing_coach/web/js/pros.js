@@ -28,7 +28,7 @@ export const PROS = [
     id: 'jeeno-thitikul', name: 'Jeeno Thitikul', tour: 'LPGA',
     note: '身材不高但非常高效：上杆紧凑，下半身带动转髋，力量来自地面。',
     fo: 'S-ZIus0Tt7U', dtl: 'gAvftC79qzM',
-    data: { driver: { dtl: 'pros/jeeno-thitikul-driver-dtl.json' } },
+    data: { driver: { fo: 'pros/jeeno-thitikul-driver-fo.json', dtl: 'pros/jeeno-thitikul-driver-dtl.json' } },
   },
 ];
 

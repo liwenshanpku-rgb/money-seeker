@@ -1,33 +1,33 @@
 {
-  "as_of_close_utc": "2026-10-29",
-  "btc_close_usd": 77991.89,
+  "as_of_close_utc": "2026-10-30",
+  "btc_close_usd": 77368.77,
   "returns": {
-    "7d": -0.0421,
-    "30d": -0.0678,
-    "90d": 0.2402,
-    "365d": -0.2911
+    "7d": -0.0471,
+    "30d": -0.0748,
+    "90d": 0.2315,
+    "365d": -0.2858
   },
-  "sma50": 81937.15,
-  "sma200": 73147.08,
-  "pct_vs_sma200": 0.0662,
-  "realized_vol_30d_annualized": 0.2871,
-  "drawdown_from_all_time_high": -0.3744,
+  "sma50": 81953.15,
+  "sma200": 73161.83,
+  "pct_vs_sma200": 0.0575,
+  "realized_vol_30d_annualized": 0.2876,
+  "drawdown_from_all_time_high": -0.3794,
   "all_time_high_in_data": 124658.54,
   "trend_rule_mode": "UP",
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 上涨模式",
   "perp_funding": {
     "source": "hyperliquid",
-    "avg_1d_annualized": 0.1007,
-    "avg_7d_annualized": 0.102,
-    "avg_30d_annualized": 0.0868,
+    "avg_1d_annualized": 0.1012,
+    "avg_7d_annualized": 0.1008,
+    "avg_30d_annualized": 0.0872,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 42772.73,
-    "open_interest_usd": 3364785184,
-    "mark_price": 78666.6,
-    "volume_24h_usd": 6145948181
+    "open_interest_btc": 41226.71,
+    "open_interest_usd": 3184598821,
+    "mark_price": 77246.0,
+    "volume_24h_usd": 3125042083
   },
-  "us_3m_tbill": 0.0401
+  "us_3m_tbill": 0.04
 }

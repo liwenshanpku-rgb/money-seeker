@@ -2,7 +2,7 @@
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases, detectView } from './phases.js';
-import { makeContext, evaluate, summarize, formatValue, compareToPro } from './metrics.js';
+import { makeContext, evaluate, summarize, formatValue } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
   alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource, imageSource, COLORS,
@@ -136,8 +136,9 @@ function score(a) {
 
 // 所有角度合在一起的结果
 function combined() {
-  // 示例数据来自合成模板（没有识别误差），和真实识别出的职业数据不可比，参考类指标不做对比
-  const results = analyses().flatMap((a) => (a.demo ? a.results : a.results.map((r) => compareToPro(r, proNum(r)))));
+  // 参考类指标（转动角度等）只显示数值，不打分，也不和职业球员比较：
+  // 单机位估算的误差因视频而异（同样转得很充分，有的视频估出 90°，有的只有 25°），比较会产生误报
+  const results = analyses().flatMap((a) => a.results);
   return { results, summary: summarize(results) };
 }
 
@@ -301,7 +302,7 @@ function renderPriorities() {
   $('priorities').innerHTML = pr.map((r) => `
     <li>
       <b>${viewTag(r)}${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}</b> <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span>
-      <div class="detail">${r.metric.name}：${formatValue(r.metric, r.value)}（${r.vsPro !== undefined ? `${state.pro.name} ${proValue(r)}，${vsProText(r)}` : `职业区间 ${fmtRange(r)}`}）。${r.advice.why}</div>
+      <div class="detail">${r.metric.name}：${formatValue(r.metric, r.value)}（职业区间 ${fmtRange(r)}）。${r.advice.why}</div>
       <div class="drill"><b>怎么改：</b>${r.advice.fix}</div>
       <div class="drill"><b>练习：</b>${r.advice.drill}</div>
     </li>`).join('');
@@ -321,9 +322,8 @@ function renderTable() {
   const rows = combined().results.filter((r) => !onlyIssues || r.status === 'warn' || r.status === 'bad');
   const proName = state.pro?.name;
   const note = (r) => (r.advice
-    ? `${r.vsPro !== undefined ? `<b>${vsProText(r)}。</b>` : ''}<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
-    : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大，不计入评分。${isDemo() ? '示例数据不和职业球员对比。' : '在上面「对比职业球员」里选一位有骨架数据的球员，就能用同一方法和这位球员比较。'}<details><summary>说明</summary>${r.metric.about}</details>`
-    : r.vsPro !== undefined ? `和 ${state.pro.name} 接近（${vsProText(r)}）。<details><summary>说明</summary>${r.metric.about}</details>`
+    ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
+    : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大（不同视频之间也不稳定），只显示数值，不计入评分，请结合画面判断。<details><summary>说明</summary>${r.metric.about}</details>`
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
     : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'
     : `<details><summary>说明</summary>${r.metric.about}</details>`);
@@ -460,17 +460,9 @@ function proResult(r) {
   if (!a || r.id === 'tempo') return null; // 职业视频可能经过剪辑变速，节奏不作对比
   return a.results.find((x) => x.id === r.id) || null;
 }
-function proNum(r) { return proResult(r)?.value ?? NaN; }
 function proValue(r) {
   const p = proResult(r);
   return p && Number.isFinite(p.value) ? formatValue(p.metric, p.value) : null;
-}
-// 和职业球员对比的说明，如「比 Adam Scott 少 25°」
-function vsProText(r) {
-  if (r.vsPro === undefined || !state.pro) return '';
-  const d = r.vsPro;
-  const unit = r.metric.unit === '°' ? '°' : ` ${r.metric.unit}`;
-  return `比 ${state.pro.name} ${d < 0 ? '少' : '多'} ${Math.abs(d).toFixed(r.metric.digits)}${unit}`;
 }
 
 // 和你上传的角度相同的视频排在前面

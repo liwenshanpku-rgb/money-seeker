@@ -39,7 +39,7 @@ export function embedURL(videoId) {
 const cache = new Map();
 
 // 数据和截图也带上发布版本号，更新后不会读到旧缓存
-const VERSION = document.documentElement.dataset.version || '';
+const VERSION = (typeof document !== 'undefined' && document.documentElement.dataset.version) || '';
 export const versioned = (url) => (VERSION && !VERSION.startsWith('__') ? `${url}?v=${VERSION}` : url);
 
 // 读取职业球员某个角度的骨架数据，补全成 33 个关键点的逐帧数组

@@ -195,6 +195,18 @@ export function drawTimeline(canvas, speed, frames, P, current) {
   ctx.textAlign = 'left';
 }
 
+// 把图像的裁剪区域画到画布上。裁剪框可能超出画面（人靠近边缘、竖拍视频不够宽），
+// iPhone Safari 遇到超出图像范围的源矩形会整张不画，所以先把源矩形限制在图像内，目标矩形同比例收缩，超出部分留黑。
+function drawClipped(ctx, img, crop, ox, oy, k) {
+  const vh = img.height;
+  const iw = img.width / vh; // 图像宽度（单位：视频高度）
+  const x0 = Math.max(crop.x, 0), y0 = Math.max(crop.y, 0);
+  const x1 = Math.min(crop.x + crop.w, iw), y1 = Math.min(crop.y + crop.h, 1);
+  if (x1 <= x0 || y1 <= y0) return;
+  ctx.drawImage(img, x0 * vh, y0 * vh, (x1 - x0) * vh, (y1 - y0) * vh,
+    ox + (x0 - crop.x) * k, oy + (y0 - crop.y) * k, (x1 - x0) * k, (y1 - y0) * k);
+}
+
 // 背景来源：识别时存下来的逐帧画面（按时间取最近的一帧），不再事后跳转视频
 export function frameSource(frames) {
   const bitmaps = new Map();
@@ -216,7 +228,7 @@ export function frameSource(frames) {
       if (!f) return;
       const bmp = await load(f);
       const vh = bmp.height;
-      ctx.drawImage(bmp, crop.x * vh, crop.y * vh, crop.w * vh, crop.h * vh, ox, oy, crop.w * k, crop.h * k);
+      drawClipped(ctx, bmp, crop, ox, oy, k);
     },
   };
 }
@@ -237,7 +249,7 @@ export function imageSource(byTime, { mirror = false } = {}) {
       const vh = bmp.height;
       ctx.save();
       if (mirror) { const cx = ox + (crop.w * k) / 2; ctx.translate(2 * cx, 0); ctx.scale(-1, 1); }
-      ctx.drawImage(bmp, crop.x * vh, crop.y * vh, crop.w * vh, crop.h * vh, ox, oy, crop.w * k, crop.h * k);
+      drawClipped(ctx, bmp, crop, ox, oy, k);
       ctx.restore();
     },
   };

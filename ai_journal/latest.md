@@ -1,32 +1,30 @@
-日期: 2026-10-25   BTC: 80,154   趋势规则: UP
-模型建议仓位: 85%（采样 [85]）   置信度: low
-执行仓位: 85%（上次 85%）
-判断: 维持 85%，不加杠杆。趋势仍是上涨模式（收盘 80,154，比 200 日均线高约 9.8%），杠杆不拥挤，长期持有者也没有在亏损中抛售。但宏观偏鹰：10 月 28 日议息会议大概率按兵不动，市场押注 12 月加息；价格也略低于 ETF 成本支撑约 8 万美元。多空因素互相抵消，按规则保持接近上次的仓位。
+日期: 2026-11-01   BTC: 78,354   趋势规则: UP
+模型建议仓位: 75%（采样 [75]）   置信度: low
+执行仓位: 75%（上次 85%）
+判断: 从 85% 小幅降到 75%，不加杠杆。趋势仍是上涨模式（收盘 78,354，比 200 日均线高 7%），币安被盗事件的外溢也已经受控。但本周有几个相互独立的利空同时出现：史上最大的交易所被盗、PCE 通胀偏热、ETF 周五大额净流出，市场情绪也落入恐惧。价格两次收在上周设的 7.75 万减仓线下方，所以先降一点风险，明天还有中期选举这个事件风险。
 主要依据:
-  [neutral/high] 趋势与价格结构：10/25 收盘 80,154，比 200 日均线（72,988）高 9.8%，仍为上涨模式；但低于 50 日均线（81,854），7 日 -2.4%、30 日 -4.7%。Glassnode 第 42 周报告：10/15 回踩约 8 万（略低于美国现货 ETF 和企业金库的成本），买盘几天内回补；活跃投资者平均成本（True Market Mean）约 77.6K。
-  [neutral/high] 美国现货 BTC ETF 资金流：10/19 净流入约 5.27 亿美元（IBIT +6.65 亿，SoSoValue/The Block），10/21 净流入 5.25 亿美元，10/22 净流出约 6.36 亿美元（IBIT -2.54 亿）。前两周分别净流出约 6.81 亿和 2.29 亿美元。10/20 和 10/23 的数据未能获取，整周方向不明。
-  [neutral/medium] 衍生品：Hyperliquid 资金费率 7 日年化 9.9%、30 日 8.3%，低于约 11% 的利率基准，多头不拥挤；持仓量约 42,300 BTC，平稳。Deribit 期权：10/30 到期约 110 亿美元名义价值（约占持仓 35%），最大痛点约 7.9 万；隐含波动率 35%–38%，高于约 25% 的已实现波动率，看跌期权有溢价（来源质量一般）。近 24 小时爆仓约 5,900 万美元，规模不大。
-  [bullish/medium] 链上：Glassnode 第 41 周报告：长期持有者基本停止亏损抛售；第 42 周 Market Pulse：约 70% 的供应处于盈利，盈利程度有所回落但仍偏高。MVRV 和交易所余额的最新数值未能获取。
-  [bearish/high] 宏观：10/27–28 FOMC 预计维持 3.75%–4.00%（预测市场约 86%–93% 不变），12 月加息已被部分定价；通胀 3.7%（单一来源）；10 年期美债约 5.0%–5.13%，3 个月国库券 4.04%；10/22 油价升至 110 美元以上，美股回落。美元指数未能获取。
-  [neutral/low] 监管与重大事件：SEC 提议允许注册投资顾问和受监管基金持有加密资产（CNBC，10/2）；GENIUS 法案下的稳定币规则已定稿；CFTC 公布交易所监管计划。CLARITY 法案 9 月在参议院失败。Strategy 增持 267 BTC（截至 10/18）；Coinkite 被盗超过 1.4 亿美元，面临集体诉讼。没有改变大局的单一事件。
-  [neutral/low] 市场情绪：恐惧与贪婪指数（alternative.me）从 10/22 的 68（贪婪）降到 10/26 的 50（中性），情绪降温，但还没到恐慌。
+  [neutral/high] 趋势与价格结构：11/01 收盘 78,354，比 200 日均线（73,197）高 7.0%，仍为上涨模式；但低于 50 日均线（81,982），7 日 -2.3%、30 日 -7.3%。10/30、10/31 收盘 77,198 和 77,435，两次跌破上周设的 77.5K 减仓线后回到 78K 以上。方案 B 的转跌线约 71,000。
+  [bearish/medium] 美国现货 BTC ETF 资金流：10/26–10/30 一周净流出约 2.03 亿美元（TFTC）：10/26–28 连续净流入，合计约 4.24 亿美元；10/29 约 +0.17 亿美元；10/30 单日净流出约 6.43 亿美元（只有一个来源）。10 月合计净流出约 5.15 亿美元。
+  [bearish/medium] 重大事件：币安被盗：10/29 币安热钱包被盗约 59–64 亿美元（Chainalysis/TRM），是史上最大的一次，FBI 归因于朝鲜 TraderTraitor。11/01 起分阶段恢复提币，先开放 BTC；恢复后净流出 36.4 亿美元，约占其 1,710 亿美元资产的 2.1%；称已为 90%–95% 受影响资产恢复兑付（CNBC/CoinDesk）。外溢受控，但损害了信心。
+  [bearish/high] 宏观：10/28 FOMC 维持 3.75%–4.00%，10:2 投票，两票主张加息，声明称经济活动“强劲”，期货定价 12 月加息约 85%。9 月 PCE 同比 3.6%（环比 0.5%），核心 3.1%；三季度 GDP 年化 3.4%。好的一面：10 年期美债从月中高点 5.36% 回落到约 4.91%–4.93%，美元指数约 101.8，略偏弱。科技股回调。11/03 中期选举，11/06 非农。
+  [neutral/medium] 衍生品：Hyperliquid 资金费率 1 日年化 11.0%、7 日 10.5%，接近约 11% 的利率基准，多头不拥挤，也没有出清；持仓量从约 42,300 BTC 降到 40,400 BTC，在去杠杆。10/30 约 110–120 亿美元期权到期，最大痛点约 78K–79K，已经过去。被盗后全网爆仓约 15.7 亿美元，八成以上是多头。
+  [neutral/low] 链上：未能获取 Glassnode 第 43、44 周报告，也没有 MVRV、交易所余额的最新数值。之前的报告显示：活跃投资者成本（True Market Mean）约 77.6K，长期持有者基本停止亏损抛售。这几天价格正好在这一带测试支撑。
+  [bearish/low] 市场情绪：恐惧与贪婪指数（alternative.me）从 10/29 的 51 跌到 10/30–31 的 30，11/02 回升到 37，处在恐惧区间。
 主要风险:
-  - FOMC 或 10/29 的 PCE 数据偏鹰，叠加 10/30 大额期权到期，价格可能有效跌破 8 万美元（ETF 成本）和 77.6K（活跃投资者成本），引发多头去杠杆。
-  - 油价进一步上涨，加剧通胀和加息预期，风险资产整体承压。
+  - 11/03 中期选举、11/06 非农或通胀数据偏热，12 月加息预期升温；币安后续还有提币挤兑或储备证明问题。价格有效跌破约 77.6K（活跃投资者成本）后，可能下探 73K–71K 的 200 日均线区域。
+  - 反方向风险：被盗利空出尽、长债收益率回落，价格可能较快反弹到 82K 以上，减仓会少赚。
 改变决定的条件:
-  - 收盘跌破约 77,500 美元（活跃投资者成本），且 ETF 连续一周净流出：减到 60%–70%。
-  - 收盘跌破约 70,800 美元（200 日均线 × 0.97，趋势规则转为下跌）：减到 50% 以下。
-  - 重新站上 8.5 万美元，且 ETF 连续净流入、资金费率仍不拥挤：可以回到 100%。
+  - 收盘跌破约 75,000 美元，且 ETF 一周净流出：减到 50%–60%。
+  - 收盘跌破约 71,000 美元（方案 B 转为下跌模式）：减到 50% 以下。
+  - 收盘重新站上 50 日均线（约 82,000 美元），且 ETF 连续净流入：回到 85%–100%。
 建议 7 天后重新评估
 本次由 Claude Code 定时任务决策（使用订阅额度，无 API 费用）
-护栏调整:
-  ! 变化 +0 个百分点小于 10，维持 85%
 参考来源:
-  - BlackRock's IBIT Bitcoin ETF draws $665 million inflow (The Block) https://www.theblock.co/news/markets/2026-10-20-blackrock-ibit-bitcoin-etf-665-million-421102
-  - Bitcoin spot ETFs see $525M net inflow on October 21, 2026 (KuCoin) https://www.kucoin.com/news/flash/bitcoin-spot-etfs-see-525m-net-inflow-on-october-21-2026
-  - Crypto rules finalized, Bitcoin retreats, Solana upgrades (crypto.news) https://crypto.news/crypto-rules-bitcoin-solana-weekly-recap/
-  - Bitcoin ETFs log $228M in weekly sales (Crypto Briefing) https://cryptobriefing.com/?p=397190
-  - Glassnode: Swept and Refilled (Week 42) https://research.glassnode.com/the-week-onchain-week-42-2026/
-  - Glassnode: Boxed In (Week 41) https://research.glassnode.com/the-week-onchain-week-41-2026/
-  - Glassnode: BTC Market Pulse Week 42 https://research.glassnode.com/btc-market-pulse-week-42-2026/
-  - 35% of Deribit's Bitcoin options OI expires October 30 (Crypto Briefing) https://cryptobriefing.com/deribit-bitcoin-options-october-30-expiry/
+  - Bitcoin ETF Flows Today (TFTC) https://www.tftc.io/bitcoin-etf-flows
+  - Bitcoin ETF Flows (Bitbo) https://bitbo.io/treasuries/etf-flows/
+  - Binance resumes withdrawals following $6.3B hack (CNBC) https://www.cnbc.com/2026/10/31/binance-hack-asset-coverage-withdrawals.html
+  - Binance sees $3.64B net outflows as withdrawals resume (CNBC) https://www.cnbc.com/2026/11/02/binance-outflow-hack-bitcoin.html
+  - Binance opens withdrawals in phases starting with bitcoin (CoinDesk) https://www.coindesk.com/markets/2026/11/01/binance-opens-crypto-withdrawals-in-phases-starting-with-bitcoin-following-usd6-3-billion-hack
+  - North Korea steals USD 6.36B from Binance (TRM Labs) https://www.trmlabs.com/resources/blog/north-korea-steals-usd-6-36-billion-from-binance-in-the-largest-hack-in-history
+  - Fed keeps rates unchanged, two dissent for hike (CNN) https://www.cnn.com/2026/10/28/business/live-news/federal-reserve-interest-rate-october
+  - Hawkish hold 10-2 (Admiral Markets) https://admiralmarkets.com/analytics/traders-blog/fed-rate-decision-october-28-2026-hawkish-hold

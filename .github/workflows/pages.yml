@@ -5,7 +5,7 @@ name: Deploy swing coach to Pages
 on:
   push:
     branches: [main]
-    paths: ["swing_coach/web/**", ".github/workflows/pages.yml"]
+    paths: ["swing_coach/web/**", "swing_coach/tools/fetch_vendor.sh", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,9 @@ jobs:
       - name: Stamp version
         # 给脚本、样式、数据的地址加上提交号，避免手机浏览器 / 主屏幕 App 用旧缓存
         run: sed -i "s/__VERSION__/${GITHUB_SHA::8}/g" swing_coach/web/index.html
+      - name: Bundle MediaPipe
+        # 识别程序和模型和网页一起发布，不再依赖 jsDelivr / Google
+        run: swing_coach/tools/fetch_vendor.sh
       - uses: actions/upload-pages-artifact@v3
         with:
           path: swing_coach/web

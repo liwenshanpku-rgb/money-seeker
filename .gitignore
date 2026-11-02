@@ -7,3 +7,4 @@ output/
 ai_journal/
 .env
 state/
+swing_coach/web/vendor/

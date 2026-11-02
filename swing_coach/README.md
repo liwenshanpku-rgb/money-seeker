@@ -31,7 +31,35 @@
 
 手机浏览器打开这个地址即可上传视频分析。姿态识别和全部规则分析都在手机浏览器里完成，视频不会上传。
 
-### 2. 开启自动点评（方式二，可选，只需一次）
+### 1b. 发布到自己的服务器（国内访问）
+
+`github.io` 在国内时好时坏。识别程序和模型已经由 `tools/fetch_vendor.sh` 打包进网页，不再依赖 Google，所以只要把 `swing_coach/web/` 放到国内能访问的服务器上就行（香港的服务器不需要备案）。
+
+1. 服务器上新建网页目录，并给部署用的用户写权限，例如 `/var/www/golf`。
+2. 生成一把只用于部署的 SSH 密钥：`ssh-keygen -t ed25519 -f golf_deploy -N ""`，把 `golf_deploy.pub` 加到服务器该用户的 `~/.ssh/authorized_keys`。
+3. 在仓库 **Settings → Secrets and variables → Actions** 添加 `SWING_SERVER_HOST`、`SWING_SERVER_USER`、`SWING_SERVER_SSH_KEY`（`golf_deploy` 私钥全文）、`SWING_SERVER_PATH`，SSH 端口不是 22 时再加 `SWING_SERVER_PORT`。
+4. nginx 加一个站点（域名换成自己的；DNS 加一条指向服务器的 A 记录，再用 `certbot --nginx -d golf.example.com` 开 HTTPS）：
+
+   ```nginx
+   server {
+       listen 80;
+       server_name golf.example.com;
+       root /var/www/golf;
+       index index.html;
+       gzip on;
+       gzip_types text/javascript application/json text/css application/wasm;
+       # 模型和识别程序很少变，长缓存；页面本身每次都检查更新
+       location /vendor/ {
+           expires 30d;
+           types { text/javascript js mjs; application/wasm wasm; application/octet-stream task; }
+       }
+       location = /index.html { add_header Cache-Control "no-cache"; }
+   }
+   ```
+
+5. 在 Actions 页面手动运行一次 **Deploy swing coach to server**。之后每次合并到 `main` 自动同步。
+
+（方式二，可选，只需一次）
 
 方式一「发给 Claude App」不需要任何设置。下面只针对方式二。
 

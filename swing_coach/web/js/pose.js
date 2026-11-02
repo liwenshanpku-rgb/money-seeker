@@ -1,22 +1,37 @@
 // 浏览器端姿态识别：MediaPipe Pose Landmarker 逐帧提取 33 个关键点。视频不会上传到服务器。
 
 const VISION_VERSION = '0.10.14';
-const VISION_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/vision_bundle.mjs`;
-const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/wasm`;
-const MODELS = {
-  full: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
-  heavy: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task',
-};
+// 优先用和网页一起发布的本地副本（tools/fetch_vendor.sh 下载），国内也能用；没有时退回 CDN / Google
+const SOURCES = [
+  { base: new URL('../vendor/mediapipe/', import.meta.url).href, model: (m) => `pose_landmarker_${m}.task` },
+  {
+    base: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/`,
+    model: (m) => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${m}/float16/1/pose_landmarker_${m}.task`,
+  },
+];
+
+let vision;
+async function loadVision() {
+  for (const src of SOURCES) {
+    try {
+      const mod = await import(`${src.base}vision_bundle.mjs`);
+      return { mod, src };
+    } catch { /* 试下一个来源 */ }
+  }
+  throw new Error('识别程序加载失败，请检查网络后重试');
+}
 
 const cache = {};
 const SNAP_HEIGHT = 720;
 
 async function landmarker(model) {
   if (cache[model]) return cache[model];
-  const { FilesetResolver, PoseLandmarker } = await import(VISION_URL);
-  const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
+  // 失败时清掉，下次点「开始分析」重新尝试
+  vision ||= loadVision().catch((e) => { vision = null; throw e; });
+  const { mod: { FilesetResolver, PoseLandmarker }, src } = await vision;
+  const fileset = await FilesetResolver.forVisionTasks(`${src.base}wasm`);
   const opts = (delegate) => ({
-    baseOptions: { modelAssetPath: MODELS[model], delegate },
+    baseOptions: { modelAssetPath: new URL(src.model(model), src.base).href, delegate },
     runningMode: 'VIDEO',
     numPoses: 1,
     minPoseDetectionConfidence: 0.5,

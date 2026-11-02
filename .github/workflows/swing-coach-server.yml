@@ -1,0 +1,54 @@
+# 把挥杆教练网页同步到自己的服务器（例如香港的虚拟机），国内不用 VPN 也能打开。
+# 需要在仓库 Settings → Secrets and variables → Actions 里添加（没配置时这个工作流自动跳过）：
+#   SWING_SERVER_HOST      服务器地址（IP 或域名）
+#   SWING_SERVER_USER      SSH 用户名
+#   SWING_SERVER_SSH_KEY   该用户的 SSH 私钥（建议单独生成一把只用于部署的）
+#   SWING_SERVER_PATH      网页目录，例如 /var/www/golf
+#   SWING_SERVER_PORT      可选，SSH 端口，默认 22
+# 服务器端的 nginx 配置见 swing_coach/README.md。
+name: Deploy swing coach to server
+
+on:
+  push:
+    branches: [main]
+    paths: ["swing_coach/web/**", "swing_coach/tools/fetch_vendor.sh", ".github/workflows/swing-coach-server.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swing-coach-server
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HOST: ${{ secrets.SWING_SERVER_HOST }}
+      USER: ${{ secrets.SWING_SERVER_USER }}
+      KEY: ${{ secrets.SWING_SERVER_SSH_KEY }}
+      DEST: ${{ secrets.SWING_SERVER_PATH }}
+      PORT: ${{ secrets.SWING_SERVER_PORT || '22' }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -z "$HOST" ] || [ -z "$USER" ] || [ -z "$KEY" ] || [ -z "$DEST" ]; then
+            echo "服务器还没配置，跳过（见本文件开头说明）"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip != 'true'
+      - name: Build
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          sed -i "s/__VERSION__/${GITHUB_SHA::8}/g" swing_coach/web/index.html
+          swing_coach/tools/fetch_vendor.sh
+      - name: Upload
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          ssh-keyscan -p "$PORT" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy -p $PORT" swing_coach/web/ "$USER@$HOST:$DEST/"

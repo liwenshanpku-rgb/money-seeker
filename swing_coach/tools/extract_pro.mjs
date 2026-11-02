@@ -39,7 +39,7 @@ const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
   const file = url === '/__video' ? path.resolve(videoPath) : path.join(webDir, url === '/' ? 'index.html' : url);
   if (!fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
-  const type = { '.js': 'text/javascript', '.html': 'text/html', '.json': 'application/json' }[path.extname(file)] || 'application/octet-stream';
+  const type = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html', '.json': 'application/json', '.wasm': 'application/wasm' }[path.extname(file)] || 'application/octet-stream';
   res.writeHead(200, { 'Content-Type': type });
   fs.createReadStream(file).pipe(res);
 });

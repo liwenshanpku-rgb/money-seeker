@@ -441,12 +441,16 @@ function renderPriorities() {
   }
   $('priorities').innerHTML = pr.map((r) => `
     <li>
-      <b>${viewTag(r)}${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}</b> <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span>
+      <b>${viewTag(r)}${r.pos} ${POSITION_INFO[r.pos].name} · ${r.advice.issue}</b> <span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span>${tpiTag(r)}
       <div class="detail">${r.metric.name}：${formatValue(r.metric, r.value)}（职业区间 ${fmtRange(r)}）。${r.advice.why}</div>
       <div class="drill"><b>怎么改：</b>${r.advice.fix}</div>
       <div class="drill"><b>练习：</b>${r.advice.drill}</div>
+      ${r.tpi ? `<div class="drill"><b>身体自测：</b>${r.tpi.screen}</div>` : ''}
     </li>`).join('');
 }
+
+// TPI 常见挥杆问题的名称（方便和教练、TPI 资料对照）
+const tpiTag = (r) => (r.tpi ? ` <span class="tpi">TPI · ${r.tpi.name}</span>` : '');
 
 function fmtRange(r) {
   const m = r.metric;
@@ -469,7 +473,7 @@ function renderTable() {
   const rows = combined().results.filter((r) => !onlyIssues || r.status === 'warn' || r.status === 'bad');
   const proName = state.pro?.name;
   const note = (r) => (r.advice
-    ? `<b>${r.advice.issue}</b>：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}`
+    ? `<b>${r.advice.issue}</b>${tpiTag(r)}：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}${r.tpi ? `<br><b>身体自测：</b>${r.tpi.screen}` : ''}`
     : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大（不同视频之间也不稳定），只显示数值，不计入评分，请结合画面判断。<details><summary>说明</summary>${r.metric.about}</details>`
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
     : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'
@@ -746,7 +750,7 @@ function coachData(withVideo) {
     metrics: results.map((r) => ({
       view: VIEW_SHORT[r.view], pos: r.pos, name: r.metric.name, pro_range: fmtRange(r),
       value: formatValue(r.metric, r.value) + (r.spread && r.of > 1 ? `（${spreadText(r)}）` : ''),
-      status: r.status, issue: r.advice?.issue ?? null,
+      status: r.status, issue: r.advice ? r.advice.issue + (r.tpi ? `（TPI：${r.tpi.name}）` : '') : null,
       pro_value: proValue(r) ? `${state.pro.name} ${proValue(r)}` : null,
     })),
   };

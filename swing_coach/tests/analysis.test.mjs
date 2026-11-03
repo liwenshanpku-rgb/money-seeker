@@ -59,6 +59,7 @@ test('侧面：识别提前伸展（臀部顶向球、起身）', () => {
   const { byId } = run({ view: 'dtl', table });
   assert.equal(byId.dtl_p7_hips.status, 'bad');
   assert.equal(byId.dtl_p7_hips.side, 'high');
+  assert.match(byId.dtl_p7_hips.tpi.name, /Early Extension/);
   assert.notEqual(byId.dtl_p7_bend.status, 'good');
   assert.notEqual(byId.dtl_p6_hips.status, 'good');
 });
@@ -79,6 +80,7 @@ test('侧面：识别下杆由外向内（双手走到上杆路线外侧）', ()
   const r = evaluate(ctx).find((x) => x.id === 'dtl_p5_path');
   assert.equal(r.side, 'high', String(r.value));
   assert.notEqual(r.status, 'good');
+  assert.match(r.tpi.name, /Over the Top/);
 });
 
 test('节奏：上杆过快时提示', () => {

@@ -1,7 +1,7 @@
 // 页面逻辑：上传 → 姿态识别 → P1–P10 检测 → 指标评估 → 渲染对比结果 →（可选）AI 教练点评
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
-import { smoothFrames, detectPhases, detectView, findSwings } from './phases.js';
+import { smoothFrames, detectPhases, findSwings } from './phases.js';
 import { makeContext, evaluate, summarize, formatValue, transitionIndex, aggregateResults, representativeIndex } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
@@ -18,9 +18,11 @@ const CLUB_TEXT = { iron: '铁杆', driver: '一号木' };
 const VIEWS = ['fo', 'dtl'];
 const VIEW_SHORT = { fo: '正面', dtl: '侧面' };
 
-// views：每个拍摄角度一份分析结果；active：校正面板当前选中的角度
-const state = { views: { fo: null, dtl: null }, active: null };
-const slots = Object.fromEntries(VIEWS.map((v) => [v, { url: null, video: $(`video-${v}`) }]));
+// views：每个拍摄角度当前显示的一杆（多杆时带 group）；swings：所有识别出的挥杆；active：校正面板当前选中的角度
+const state = { views: { fo: null, dtl: null }, swings: [], notes: [], active: null };
+// 上传的视频：一个或多个，正面 / 侧面自动识别，长视频自动找出每一杆
+const files = [];
+let fileSeq = 0;
 
 // 手机上逐帧识别较慢，默认 30fps
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
@@ -39,62 +41,74 @@ function settings() {
 const MAX_LEN = 180, SINGLE_MAX = 8, MAX_SWINGS = 8;
 
 const analyses = () => VIEWS.map((v) => state.views[v]).filter(Boolean);
-const hasVideo = (v) => !!slots[v].url;
 
-// ---------- 上传（正面、侧面两个位置，各自可选） ----------
-for (const v of VIEWS) {
-  const drop = $(`drop-${v}`);
-  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', (e) => {
-    e.preventDefault();
-    drop.classList.remove('over');
-    const f = e.dataTransfer.files?.[0];
-    if (f) loadVideo(v, f);
-  });
-  $(`file-${v}`).addEventListener('change', (e) => {
-    const f = e.target.files[0];
-    e.target.value = ''; // 允许再次选择同一个文件
-    if (f) loadVideo(v, f);
-  });
-}
-document.querySelectorAll('[data-clear]').forEach((btn) => btn.addEventListener('click', () => clearSlot(btn.dataset.clear)));
+// ---------- 上传（一个或多个视频，不用分正面侧面） ----------
+const drop = $('drop-all');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  [...(e.dataTransfer.files || [])].forEach(addVideo);
+});
+$('file-all').addEventListener('change', (e) => {
+  [...e.target.files].forEach(addVideo);
+  e.target.value = ''; // 允许再次选择同一个文件
+});
+$('videoList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-remove]');
+  if (b) removeVideo(Number(b.dataset.remove));
+});
 
-function loadVideo(v, file) {
-  const slot = slots[v];
-  if (slot.url) URL.revokeObjectURL(slot.url);
-  slot.url = URL.createObjectURL(file);
-  const video = slot.video;
-  video.src = slot.url;
-  video.load();
+function addVideo(file) {
+  if (!file.type.startsWith('video/') && !/\.(mov|mp4|m4v|webm)$/i.test(file.name)) return;
+  const f = { id: ++fileSeq, name: file.name, url: URL.createObjectURL(file), duration: 0 };
+  // 视频元素放在列表里当缩略预览；iPhone 需要元素在页面上才能稳定解码
+  const video = document.createElement('video');
+  Object.assign(video, { muted: true, playsInline: true, preload: 'auto' });
+  video.setAttribute('playsinline', '');
+  video.src = `${f.url}#t=0.1`; // 让缩略图显示第一帧附近的画面
+  f.video = video;
+  files.push(f);
   video.onloadedmetadata = () => {
-    $(`drop-${v}`).classList.add('has-video');
-    $(`foot-${v}`).hidden = false;
-    $(`start-${v}`).value = 0;
-    const dur = videoDuration(video);
-    $(`end-${v}`).value = Math.min(dur, MAX_LEN).toFixed(1);
-    $(`note-${v}`).textContent = dur > SINGLE_MAX ? `长视频：会自动找出每一杆${dur > MAX_LEN ? `（只分析前 ${MAX_LEN / 60} 分钟）` : ''}` : '';
-    hideError();
-    updateAnalyzeButton();
+    f.duration = videoDuration(video);
+    renderVideoList();
   };
+  video.load();
+  renderVideoList();
+  hideError();
 }
 
-function clearSlot(v) {
-  const slot = slots[v];
-  if (slot.url) URL.revokeObjectURL(slot.url);
-  slot.url = null;
-  slot.video.removeAttribute('src');
-  slot.video.load();
-  $(`drop-${v}`).classList.remove('has-video');
-  $(`foot-${v}`).hidden = true;
-  $(`note-${v}`).textContent = '';
+function removeVideo(id) {
+  const i = files.findIndex((f) => f.id === id);
+  if (i < 0) return;
+  URL.revokeObjectURL(files[i].url);
+  files.splice(i, 1);
+  renderVideoList();
+}
+
+function renderVideoList() {
+  const list = $('videoList');
+  list.hidden = !files.length;
+  drop.classList.toggle('compact', files.length > 0);
+  // 保留已有的 video 元素（重新创建会丢失已加载的数据）
+  list.replaceChildren(...files.map((f, i) => {
+    const li = document.createElement('li');
+    li.append(f.video);
+    const info = document.createElement('div');
+    const long = f.duration > SINGLE_MAX;
+    info.innerHTML = `<b>视频 ${i + 1}</b> <span class="muted small">${f.duration ? `${f.duration.toFixed(1)} 秒` : '读取中…'}</span>
+      <div class="muted small">${long ? `长视频：自动找出每一杆${f.duration > MAX_LEN ? `（只分析前 ${MAX_LEN / 60} 分钟）` : ''}` : '一杆'}</div>
+      <button type="button" class="link-btn" data-remove="${f.id}">移除</button>`;
+    li.append(info);
+    return li;
+  }));
   updateAnalyzeButton();
 }
 
 function updateAnalyzeButton() {
-  const n = VIEWS.filter(hasVideo).length;
-  $('analyze').disabled = n === 0;
-  $('analyze').textContent = n === 2 ? '开始分析（正面 + 侧面）' : '开始分析';
+  $('analyze').disabled = files.length === 0;
+  $('analyze').textContent = files.length > 1 ? `开始分析（${files.length} 个视频）` : '开始分析';
 }
 
 // 结果页的「分析新视频」：清掉旧结果，回到上传区
@@ -108,8 +122,10 @@ function hideResults() {
 }
 
 $('newAnalysis').addEventListener('click', () => {
-  VIEWS.forEach(clearSlot);
+  while (files.length) removeVideo(files[0].id);
   state.views = { fo: null, dtl: null };
+  state.swings = [];
+  state.notes = [];
   state.saved = null;
   hideResults();
 });
@@ -122,11 +138,6 @@ function analyzeFrames(rawFrames, s, extra = {}) {
     ...extra, settings: s, raw: rawFrames, frames: smoothed, speed: det.speed,
     view: det.view, dir: det.dir, autoP: { ...det.P }, P: { ...det.P },
   };
-  // 用户指定了角度但画面看起来不像：提醒一下（仍按用户指定的角度分析）
-  if (s.view) {
-    const guess = detectView(smoothed[det.P.P1].lm, s.handed);
-    if (guess !== s.view) a.viewWarning = `${VIEW_SHORT[s.view]}位置的视频看起来更像${VIEW_SHORT[guess]}拍摄，请确认放对了位置。`;
-  }
   score(a);
   return a;
 }
@@ -176,54 +187,75 @@ async function analyzeVideo(video, s, label = '') {
   return a;
 }
 
-// 一个角度的视频：短视频直接分析；长视频先低帧率粗扫找出每一杆，再逐杆分析并综合
-async function analyzeSlot(video, s, label) {
-  if (!(s.end - s.start > SINGLE_MAX)) return analyzeVideo(video, s, label);
+// 一个视频：短视频当作一杆；长视频先低帧率粗扫找出每一杆，再逐杆分析。每一杆各自识别正面 / 侧面
+async function analyzeFile(f, s, label) {
+  const dur = Math.min(f.duration || videoDuration(f.video), MAX_LEN);
+  if (!(dur > SINGLE_MAX)) {
+    const a = await analyzeVideo(f.video, { ...s, start: 0, end: dur }, label);
+    return [Object.assign(a, { fileNo: f.no })];
+  }
   setProgress(0, `${label}加载姿态识别模型…`);
-  const { frames } = await extractPoses(video, {
-    fps: 12, start: s.start, end: s.end, model: s.model, snapshots: false,
-    onProgress: (f) => setProgress(f, `${label}寻找每一杆 ${Math.round(f * 100)}%`),
+  const { frames } = await extractPoses(f.video, {
+    fps: 12, start: 0, end: dur, model: s.model, snapshots: false,
+    onProgress: (x) => setProgress(x, `${label}寻找每一杆 ${Math.round(x * 100)}%`),
   });
-  const good = frames.filter((f) => f.lm);
-  if (good.length < frames.length * 0.2) throw new Error(`${label}大部分画面没有识别到人体，请确保全身在画面中、光线充足`);
+  if (frames.filter((x) => x.lm).length < frames.length * 0.2) throw new Error(`${label}大部分画面没有识别到人体，请确保全身在画面中、光线充足`);
   const found = findSwings(fillMissing(frames).frames, { handed: s.handed });
-  if (!found.length) throw new Error(`${label}视频里没有找到完整的挥杆（需要上杆到双手过肩）。可以调整区间后重试。`);
+  if (!found.length) throw new Error(`${label}没有找到完整的挥杆（需要上杆到双手过肩）`);
   const windows = found.slice(0, MAX_SWINGS);
-  const swings = [];
+  if (found.length > windows.length) state.notes.push(`${label}找到 ${found.length} 杆，只分析了前 ${MAX_SWINGS} 杆`);
+  const out = [];
   for (const [k, w] of windows.entries()) {
     try {
-      const a = await analyzeVideo(video, { ...s, start: w.start, end: w.end }, `${label}第 ${k + 1}/${windows.length} 杆：`);
-      a.swingNo = k + 1;
-      a.swingAt = w.peak;
-      swings.push(a);
+      const a = await analyzeVideo(f.video, { ...s, start: w.start, end: w.end }, `${label}第 ${k + 1}/${windows.length} 杆：`);
+      out.push(Object.assign(a, { fileNo: f.no, swingAt: w.peak }));
     } catch (err) {
       console.warn('跳过一杆', w, err);
+      state.notes.push(`${label}${w.peak.toFixed(1)} 秒处的一杆没能完成分析`);
     }
   }
-  if (!swings.length) throw new Error(`${label}找到 ${windows.length} 杆，但都没能完成分析，请确认全身在画面中、光线充足`);
-  if (swings.length === 1) return swings[0];
-  const group = makeGroup(swings);
-  group.found = found.length;
-  return swings[group.index];
+  if (!out.length) throw new Error(`${label}找到 ${windows.length} 杆，但都没能完成分析，请确认全身在画面中、光线充足`);
+  return out;
+}
+
+// 按识别出的角度分组：每组一杆就直接用，多杆则综合并选出代表的一杆
+function groupByView(swings) {
+  const views = { fo: null, dtl: null };
+  for (const v of VIEWS) {
+    const list = swings.filter((a) => a.view === v);
+    list.forEach((a, i) => { delete a.group; a.swingNo = i + 1; });
+    if (list.length === 1) views[v] = list[0];
+    else if (list.length > 1) views[v] = list[makeGroup(list).index];
+  }
+  return views;
 }
 
 $('analyze').addEventListener('click', async () => {
   // 必须在点击事件里同步调用（iPhone 要求播放由用户手势触发）
-  const todo = VIEWS.filter(hasVideo);
-  const primed = todo.map((v) => primeVideo(slots[v].video));
+  const todo = [...files];
+  const primed = todo.map((f) => primeVideo(f.video));
   hideError();
   $('analyze').disabled = true;
   try {
     await Promise.all(primed);
     const s = settings();
-    const views = { fo: null, dtl: null };
-    for (const v of todo) {
-      const video = slots[v].video;
-      const start = Number($(`start-${v}`).value) || 0;
-      const end = Number($(`end-${v}`).value) || undefined;
-      views[v] = await analyzeSlot(video, { ...s, view: v, start, end }, todo.length > 1 ? `${VIEW_SHORT[v]}：` : '');
+    state.notes = [];
+    const swings = [];
+    const errors = [];
+    for (const [k, f] of todo.entries()) {
+      f.no = k + 1;
+      const label = todo.length > 1 ? `视频 ${k + 1}：` : '';
+      try {
+        swings.push(...await analyzeFile(f, s, label));
+      } catch (err) {
+        console.error(err);
+        errors.push(err.message || String(err));
+      }
     }
-    state.views = views;
+    if (!swings.length) throw new Error(errors.join(' '));
+    state.notes.unshift(...errors);
+    state.swings = swings;
+    state.views = groupByView(swings);
     state.saved = null;
     setProgress(1, '完成');
     await renderAll();
@@ -353,21 +385,45 @@ function renderSummary() {
 }
 
 // 多杆：说明评分是综合结果，并可切换下面关键帧、轨迹、逐帧查看显示的是哪一杆
+// 识别出的每一杆：按正面 / 侧面分组列出，可切换关键帧显示的那一杆；角度认错了可以改
 function renderSwingPicker() {
-  const groups = analyses().filter((a) => a.group);
-  $('swingPicker').hidden = !groups.length;
-  $('swingPicker').innerHTML = groups.map((a) => {
-    const g = a.group;
-    const skipped = (g.found > g.swings.length ? `，另有 ${g.found - g.swings.length} 杆未能分析或超过 ${MAX_SWINGS} 杆` : '');
-    return `<div><b>${VIEW_SHORT[a.view]}视频找到 ${g.swings.length} 杆${skipped}。</b>评分和检查项是各杆的综合（取中位数），下面的关键帧显示：
-      ${g.swings.map((x, i) => `<button type="button" class="swing-btn${x === a ? ' on' : ''}" data-view="${a.view}" data-i="${i}">第 ${x.swingNo} 杆${i === g.index ? '（代表）' : ''}</button>`).join('')}</div>`;
-  }).join('');
+  const list = analyses();
+  $('swingPicker').hidden = isDemo() || !list.length;
+  if (isDemo()) return;
+  const many = new Set(state.swings.map((a) => a.fileNo)).size > 1;
+  const where = (a) => [many ? `视频 ${a.fileNo}` : '', a.swingAt != null ? `${a.swingAt.toFixed(1)} 秒处` : ''].filter(Boolean).join(' ');
+  const lines = list.map((a) => {
+    const all = a.group ? a.group.swings : [a];
+    const other = a.view === 'fo' ? 'dtl' : 'fo';
+    const chips = all.length > 1
+      ? `关键帧显示：${all.map((x, i) => `<button type="button" class="swing-btn${x === a ? ' on' : ''}" data-view="${a.view}" data-i="${i}" title="${where(x)}">第 ${x.swingNo} 杆${i === a.group.index ? '（代表）' : ''}</button>`).join('')}`
+      : '';
+    return `<div><b>${VIEW_SHORT[a.view]} ${all.length} 杆</b>${all.length > 1 ? '，评分和检查项取各杆中位数' : ''}。${chips}
+      <span class="muted">${all.length > 1 ? '当前这一杆' : ''}${where(a) ? `来自${where(a)}` : ''}</span>
+      <button type="button" class="link-btn flip" data-flip="${a.view}">这一杆其实是${VIEW_SHORT[other]}？</button></div>`;
+  });
+  const notes = state.notes.map((n) => `<div class="muted">${n}</div>`);
+  $('swingPicker').innerHTML = [...lines, ...notes].join('');
 }
 $('swingPicker').addEventListener('click', async (e) => {
   const b = e.target.closest('.swing-btn');
-  if (!b) return;
-  const a = state.views[b.dataset.view];
-  state.views[b.dataset.view] = a.group.swings[Number(b.dataset.i)];
+  if (b) {
+    const a = state.views[b.dataset.view];
+    state.views[b.dataset.view] = a.group.swings[Number(b.dataset.i)];
+    await renderAll({ scroll: false });
+    return;
+  }
+  const flip = e.target.closest('[data-flip]');
+  if (!flip) return;
+  // 把当前显示的这一杆按另一个角度重新分析，再重新分组
+  const a = state.views[flip.dataset.flip];
+  const other = a.view === 'fo' ? 'dtl' : 'fo';
+  const b2 = analyzeFrames(a.raw, { ...a.settings, view: other }, {
+    aspect: a.aspect, source: a.source, missingRatio: a.missingRatio, fileNo: a.fileNo, swingAt: a.swingAt,
+  });
+  state.swings[state.swings.indexOf(a)] = b2;
+  state.views = groupByView(state.swings);
+  state.views[other] = b2;
   await renderAll({ scroll: false });
 });
 

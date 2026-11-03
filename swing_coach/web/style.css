@@ -53,9 +53,6 @@ h2 small { font-size: 12.5px; font-weight: 400; color: var(--muted); }
 }
 canvas { width: 100%; height: auto; display: block; border-radius: 10px; background: #0d1512; }
 
-.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.slot { display: grid; gap: 8px; align-content: start; }
-.slot-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .drop {
   position: relative;
   border: 2px dashed var(--line);
@@ -68,14 +65,14 @@ canvas { width: 100%; height: auto; display: block; border-radius: 10px; backgro
   background: var(--accent-soft);
 }
 .drop.over { border-color: var(--accent); }
-.drop.has-video { border-style: solid; background: #000; }
-.drop video { max-width: 100%; max-height: 360px; display: none; pointer-events: none; }
-.drop.has-video video { display: block; }
-.drop.has-video .drop-hint { display: none; }
+.drop.compact { min-height: 64px; }
+.video-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); }
+.video-list li { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+.video-list video { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
+.video-list .link-btn { margin-top: 2px; }
+.swing-picker .flip { color: var(--accent); margin-left: 4px; }
 .drop-hint { text-align: center; display: grid; gap: 4px; padding: 20px; }
 .drop-hint span { color: var(--muted); font-size: 13px; }
-.slot-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
-.slot-foot .range input { width: 64px; padding: 4px 6px; }
 .link-btn { border: none; background: none; padding: 0; color: var(--bad); font-size: 13px; }
 .slot-tip { margin: 10px 0 0; }
 .summary-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
@@ -210,8 +207,7 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
 @media (max-width: 760px) {
   .grid2 { grid-template-columns: 1fr; }
   .summary { grid-template-columns: 1fr; justify-items: center; text-align: center; }
-  .slots { grid-template-columns: 1fr; }
-  /* 检查项表格在手机上改为卡片列表 */
+    /* 检查项表格在手机上改为卡片列表 */
   table.metrics, table.metrics tbody { display: block; }
   table.metrics thead { display: none; }
   table.metrics tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -246,7 +242,6 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
 .demo-banner { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
   margin: 16px 0 0; padding: 10px 14px; border-radius: 12px; background: #fff4d6; color: #5a4300; border: 1px solid #f0d68a; font-size: 14px; }
 .demo-banner button { padding: 6px 14px; }
-.slot-note { flex-basis: 100%; }
 .swing-picker { grid-column: 1 / -1; font-size: 13px; line-height: 1.7; }
 .swing-picker > div + div { margin-top: 6px; }
 .swing-btn { margin: 2px 4px 2px 0; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line, #ccd); background: transparent; color: inherit; font-size: 13px; cursor: pointer; }

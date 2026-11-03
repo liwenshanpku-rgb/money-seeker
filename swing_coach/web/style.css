@@ -246,3 +246,9 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
 .demo-banner { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
   margin: 16px 0 0; padding: 10px 14px; border-radius: 12px; background: #fff4d6; color: #5a4300; border: 1px solid #f0d68a; font-size: 14px; }
 .demo-banner button { padding: 6px 14px; }
+.slot-note { flex-basis: 100%; }
+.swing-picker { grid-column: 1 / -1; font-size: 13px; line-height: 1.7; }
+.swing-picker > div + div { margin-top: 6px; }
+.swing-btn { margin: 2px 4px 2px 0; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line, #ccd); background: transparent; color: inherit; font-size: 13px; cursor: pointer; }
+.swing-btn.on { background: var(--accent, #1d7a4f); border-color: var(--accent, #1d7a4f); color: #fff; }
+.c-val .spread { display: block; font-size: 11px; color: var(--muted, #777); font-weight: normal; }

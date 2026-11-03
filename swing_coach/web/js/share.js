@@ -20,6 +20,9 @@ export function buildShareText(prompt, { settings, score, timing, metrics, note 
     else lines.push(`各位置时间（秒）：${fmt(timing)}`);
   }
   if (settings.demo) lines.push('注意：这是程序合成的示例挥杆（只有骨架，没有真实画面）。');
+  for (const [view, sw] of Object.entries(settings.swings || {})) {
+    lines.push(`${view}视频里有 ${sw.count} 杆：下面的测量值是各杆的中位数，括号里是各杆的最小 ~ 最大值；关键帧拼图是其中第 ${sw.shown} 杆。`);
+  }
   lines.push('', '# 程序测量结果（2D 视频估算）');
   const multiView = settings.view === 'both';
   for (const m of metrics) {

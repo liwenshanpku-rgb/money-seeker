@@ -1,8 +1,8 @@
 // 页面逻辑：上传 → 姿态识别 → P1–P10 检测 → 指标评估 → 渲染对比结果 →（可选）AI 教练点评
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
-import { smoothFrames, detectPhases, detectView } from './phases.js';
-import { makeContext, evaluate, summarize, formatValue, transitionIndex } from './metrics.js';
+import { smoothFrames, detectPhases, detectView, findSwings } from './phases.js';
+import { makeContext, evaluate, summarize, formatValue, transitionIndex, aggregateResults, representativeIndex } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
   alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource, imageSource, COLORS,
@@ -34,6 +34,9 @@ function settings() {
     model: $('model').value,
   };
 }
+
+// 单段视频最长分析多久；超过 SINGLE_MAX 秒就当作「多杆长视频」，先粗扫找出每一杆
+const MAX_LEN = 180, SINGLE_MAX = 8, MAX_SWINGS = 8;
 
 const analyses = () => VIEWS.map((v) => state.views[v]).filter(Boolean);
 const hasVideo = (v) => !!slots[v].url;
@@ -68,9 +71,10 @@ function loadVideo(v, file) {
     $(`drop-${v}`).classList.add('has-video');
     $(`foot-${v}`).hidden = false;
     $(`start-${v}`).value = 0;
-    $(`end-${v}`).value = Math.min(videoDuration(video), 15).toFixed(1);
-    if (videoDuration(video) > 15) showError(`${VIEW_SHORT[v]}视频超过 15 秒，默认只分析前 15 秒；可以调整区间只包含一次挥杆。`);
-    else hideError();
+    const dur = videoDuration(video);
+    $(`end-${v}`).value = Math.min(dur, MAX_LEN).toFixed(1);
+    $(`note-${v}`).textContent = dur > SINGLE_MAX ? `长视频：会自动找出每一杆${dur > MAX_LEN ? `（只分析前 ${MAX_LEN / 60} 分钟）` : ''}` : '';
+    hideError();
     updateAnalyzeButton();
   };
 }
@@ -83,6 +87,7 @@ function clearSlot(v) {
   slot.video.load();
   $(`drop-${v}`).classList.remove('has-video');
   $(`foot-${v}`).hidden = true;
+  $(`note-${v}`).textContent = '';
   updateAnalyzeButton();
 }
 
@@ -132,13 +137,29 @@ function score(a) {
   a.oblique = a.view === 'fo' && ctx.oblique();
   a.summary = summarize(a.results);
   a.ref = { lm: a.frames[a.P.P1].lm, dir: a.dir };
+  if (a.group) regroup(a.group);
+}
+
+// 一个角度的结果：多杆时是各杆综合，单杆就是这一杆
+const resultsOf = (a) => a.group?.results || a.results;
+
+// 多杆：逐杆结果综合，选出最有代表性的一杆用来显示关键帧
+function makeGroup(swings) {
+  const group = { swings, index: 0 };
+  regroup(group);
+  group.index = representativeIndex(swings.map((a) => a.results), group.results);
+  for (const a of swings) a.group = group;
+  return group;
+}
+function regroup(group) {
+  group.results = aggregateResults(group.swings.map((a) => a.results));
 }
 
 // 所有角度合在一起的结果
 function combined() {
   // 参考类指标（转动角度等）只显示数值，不打分，也不和职业球员比较：
   // 单机位估算的误差因视频而异（同样转得很充分，有的视频估出 90°，有的只有 25°），比较会产生误报
-  const results = analyses().flatMap((a) => a.results);
+  const results = analyses().flatMap(resultsOf);
   return { results, summary: summarize(results) };
 }
 
@@ -155,6 +176,37 @@ async function analyzeVideo(video, s, label = '') {
   return a;
 }
 
+// 一个角度的视频：短视频直接分析；长视频先低帧率粗扫找出每一杆，再逐杆分析并综合
+async function analyzeSlot(video, s, label) {
+  if (!(s.end - s.start > SINGLE_MAX)) return analyzeVideo(video, s, label);
+  setProgress(0, `${label}加载姿态识别模型…`);
+  const { frames } = await extractPoses(video, {
+    fps: 12, start: s.start, end: s.end, model: s.model, snapshots: false,
+    onProgress: (f) => setProgress(f, `${label}寻找每一杆 ${Math.round(f * 100)}%`),
+  });
+  const good = frames.filter((f) => f.lm);
+  if (good.length < frames.length * 0.2) throw new Error(`${label}大部分画面没有识别到人体，请确保全身在画面中、光线充足`);
+  const found = findSwings(fillMissing(frames).frames, { handed: s.handed });
+  if (!found.length) throw new Error(`${label}视频里没有找到完整的挥杆（需要上杆到双手过肩）。可以调整区间后重试。`);
+  const windows = found.slice(0, MAX_SWINGS);
+  const swings = [];
+  for (const [k, w] of windows.entries()) {
+    try {
+      const a = await analyzeVideo(video, { ...s, start: w.start, end: w.end }, `${label}第 ${k + 1}/${windows.length} 杆：`);
+      a.swingNo = k + 1;
+      a.swingAt = w.peak;
+      swings.push(a);
+    } catch (err) {
+      console.warn('跳过一杆', w, err);
+    }
+  }
+  if (!swings.length) throw new Error(`${label}找到 ${windows.length} 杆，但都没能完成分析，请确认全身在画面中、光线充足`);
+  if (swings.length === 1) return swings[0];
+  const group = makeGroup(swings);
+  group.found = found.length;
+  return swings[group.index];
+}
+
 $('analyze').addEventListener('click', async () => {
   // 必须在点击事件里同步调用（iPhone 要求播放由用户手势触发）
   const todo = VIEWS.filter(hasVideo);
@@ -169,7 +221,7 @@ $('analyze').addEventListener('click', async () => {
       const video = slots[v].video;
       const start = Number($(`start-${v}`).value) || 0;
       const end = Number($(`end-${v}`).value) || undefined;
-      views[v] = await analyzeVideo(video, { ...s, view: v, start, end }, todo.length > 1 ? `${VIEW_SHORT[v]}：` : '');
+      views[v] = await analyzeSlot(video, { ...s, view: v, start, end }, todo.length > 1 ? `${VIEW_SHORT[v]}：` : '');
     }
     state.views = views;
     state.saved = null;
@@ -266,7 +318,7 @@ const multi = () => analyses().length > 1;
 const viewTag = (r) => (multi() ? `<span class="tag">${VIEW_SHORT[r.view]}</span>` : '');
 
 function tempoText(a) {
-  const r = a.results.find((x) => x.id === 'tempo');
+  const r = resultsOf(a).find((x) => x.id === 'tempo');
   return r && Number.isFinite(r.value) ? `${r.value.toFixed(1)} : 1` : '—';
 }
 
@@ -278,14 +330,15 @@ function renderSummary() {
   $('ring').style.strokeDashoffset = String(327 * (1 - (sc ?? 0) / 100));
   const first = list[0];
   $('facts').innerHTML = [
-    ['拍摄角度', list.map((a) => VIEW_SHORT[a.view]).join(' + ') + (list.length === 1 ? '（可再传另一个角度）' : '')],
+    ['拍摄角度', list.map((a) => VIEW_SHORT[a.view] + (a.group ? ` ${a.group.swings.length} 杆` : '')).join(' + ') + (list.length === 1 ? '（可再传另一个角度）' : '')],
     ['球杆 / 惯用手', `${CLUB_TEXT[first.settings.club]} · ${first.settings.handed === 'left' ? '左手' : '右手'}`],
     ['节奏 上杆:下杆', list.map((a) => (multi() ? `${VIEW_SHORT[a.view]} ${tempoText(a)}` : tempoText(a))).join('，')],
     ...list.map((a) => {
       const t = (p) => a.frames[a.P[p]].t;
       // 和节奏一致：下杆从双手开始下落算起
       const tt = a.frames[transitionIndex(a.frames, a.P, a.settings.handed)].t;
-      return [`上杆 / 下杆用时${multi() ? `（${VIEW_SHORT[a.view]}）` : ''}`, `${(tt - t('P1')).toFixed(2)}s / ${(t('P7') - tt).toFixed(2)}s`];
+      const which = [multi() ? VIEW_SHORT[a.view] : '', a.group ? `第 ${a.swingNo} 杆` : ''].filter(Boolean).join(' ');
+      return [`上杆 / 下杆用时${which ? `（${which}）` : ''}`, `${(tt - t('P1')).toFixed(2)}s / ${(t('P7') - tt).toFixed(2)}s`];
     }),
     ...(first.demo ? [['数据来源', '示例合成挥杆']] : []),
     ['对比模板', state.pro ? `内置职业模板 + ${state.pro.name}` : '内置职业模板'],
@@ -294,9 +347,29 @@ function renderSummary() {
   const only = list.length === 1 ? list[0].view : null;
   $('missingView').hidden = !only;
   if (only) $('missingView').innerHTML = `<b>这次没有${only === 'dtl' ? '正面' : '侧面'}视频，以下项目没有检查：</b>${MISSING_TEXT[only]}。`;
+  renderSwingPicker();
   $('counts').innerHTML = ['good', 'warn', 'bad', 'na', 'ref'].filter((s) => s !== 'ref' || counts.ref)
     .map((s) => `<div><span class="chip ${s}">${STATUS_TEXT[s]}</span> ${counts[s]} 项</div>`).join('');
 }
+
+// 多杆：说明评分是综合结果，并可切换下面关键帧、轨迹、逐帧查看显示的是哪一杆
+function renderSwingPicker() {
+  const groups = analyses().filter((a) => a.group);
+  $('swingPicker').hidden = !groups.length;
+  $('swingPicker').innerHTML = groups.map((a) => {
+    const g = a.group;
+    const skipped = (g.found > g.swings.length ? `，另有 ${g.found - g.swings.length} 杆未能分析或超过 ${MAX_SWINGS} 杆` : '');
+    return `<div><b>${VIEW_SHORT[a.view]}视频找到 ${g.swings.length} 杆${skipped}。</b>评分和检查项是各杆的综合（取中位数），下面的关键帧显示：
+      ${g.swings.map((x, i) => `<button type="button" class="swing-btn${x === a ? ' on' : ''}" data-view="${a.view}" data-i="${i}">第 ${x.swingNo} 杆${i === g.index ? '（代表）' : ''}</button>`).join('')}</div>`;
+  }).join('');
+}
+$('swingPicker').addEventListener('click', async (e) => {
+  const b = e.target.closest('.swing-btn');
+  if (!b) return;
+  const a = state.views[b.dataset.view];
+  state.views[b.dataset.view] = a.group.swings[Number(b.dataset.i)];
+  await renderAll({ scroll: false });
+});
 
 const MISSING_TEXT = {
   dtl: '站位宽度、骨盆左右移动和重心转移、头部左右移动、脊柱侧倾、击球时手领先、前腿支撑、送杆伸展。侧面视频拍不出朝目标方向的动作，这些只能从正面看；下次可以请朋友站到你正前方拍一杆',
@@ -328,6 +401,13 @@ function fmtRange(r) {
 }
 
 
+// 各杆的最小 ~ 最大值（单位只写一次）
+function spreadText(r) {
+  const m = r.metric, [lo, hi] = r.spread;
+  if (m.format) return `${m.format(lo)} ~ ${m.format(hi)}`;
+  return `${lo.toFixed(m.digits)} ~ ${hi.toFixed(m.digits)}${m.unit ? ` ${m.unit}` : ''}`;
+}
+
 function renderTable() {
   const onlyIssues = $('onlyIssues').checked;
   const rows = combined().results.filter((r) => !onlyIssues || r.status === 'warn' || r.status === 'bad');
@@ -346,7 +426,7 @@ function renderTable() {
         ${multi() ? `<td class="c-view">${VIEW_SHORT[r.view]}</td>` : ''}
         <td class="c-pos">${multi() ? `<span class="tag m-only">${VIEW_SHORT[r.view]}</span>` : ''}${r.pos}</td>
         <td class="c-name">${r.metric.name}</td>
-        <td class="num c-val"><span class="lbl">你的数值 </span>${formatValue(r.metric, r.value)}</td>
+        <td class="num c-val"><span class="lbl">你的数值 </span>${formatValue(r.metric, r.value)}${r.spread && r.of > 1 ? `<span class="spread">${r.n} 杆：${spreadText(r)}</span>` : ''}</td>
         ${proName ? `<td class="num c-pro"><span class="lbl">${proName} </span>${proValue(r) ?? '—'}</td>` : ''}
         <td class="num c-range"><span class="lbl">职业区间 </span>${fmtRange(r)}</td>
         <td class="c-status"><span class="chip ${r.status}">${STATUS_TEXT[r.status]}</span></td>
@@ -602,12 +682,14 @@ function coachData(withVideo) {
       handed: first.settings.handed, club: first.settings.club,
       view: list.length === 1 ? first.view : 'both', views: list.map((a) => a.view),
       demo: isDemo(), skeletonOnly: !withVideo,
+      swings: Object.fromEntries(list.filter((a) => a.group).map((a) => [VIEW_SHORT[a.view], { count: a.group.swings.length, shown: a.swingNo }])),
     },
     note: $('coachNote').value.trim(),
     score: summary.score,
     timing: list.length === 1 ? timing(first) : Object.fromEntries(list.map((a) => [VIEW_SHORT[a.view], timing(a)])),
     metrics: results.map((r) => ({
-      view: VIEW_SHORT[r.view], pos: r.pos, name: r.metric.name, value: formatValue(r.metric, r.value), pro_range: fmtRange(r),
+      view: VIEW_SHORT[r.view], pos: r.pos, name: r.metric.name, pro_range: fmtRange(r),
+      value: formatValue(r.metric, r.value) + (r.spread && r.of > 1 ? `（${spreadText(r)}）` : ''),
       status: r.status, issue: r.advice?.issue ?? null,
       pro_value: proValue(r) ? `${state.pro.name} ${proValue(r)}` : null,
     })),

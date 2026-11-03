@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import statistics
 from dataclasses import asdict, dataclass, field
+from typing import Literal
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
@@ -35,6 +36,9 @@ BLOCKED_DOMAINS = ["sec.gov"]
 
 # ---------------------------------------------------------------- 输出结构
 
+RESEARCH_CATEGORIES = ["etf_flows", "derivatives", "onchain", "macro", "events", "sentiment"]
+CATEGORIES = ["trend", *RESEARCH_CATEGORIES]
+
 DECISION_SCHEMA = {
     "type": "object",
     "properties": {
@@ -47,11 +51,14 @@ DECISION_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "factor": {"type": "string"},
+                    "category": {"type": "string", "enum": CATEGORIES,
+                                 "description": "trend=价格趋势；其余六类对应研究清单 a–f"},
+                    "data_available": {"type": "boolean", "description": "这一条有没有查到具体、近期的数据"},
                     "signal": {"type": "string", "enum": ["bullish", "bearish", "neutral"]},
                     "weight": {"type": "string", "enum": ["low", "medium", "high"]},
                     "evidence": {"type": "string"},
                 },
-                "required": ["factor", "signal", "weight", "evidence"],
+                "required": ["factor", "category", "data_available", "signal", "weight", "evidence"],
                 "additionalProperties": False,
             },
         },
@@ -68,9 +75,41 @@ DECISION_SCHEMA = {
 
 class Factor(BaseModel):
     factor: str
-    signal: str
-    weight: str
+    category: Literal["trend", "etf_flows", "derivatives", "onchain", "macro", "events", "sentiment"]
+    data_available: bool
+    signal: Literal["bullish", "bearish", "neutral"]
+    weight: Literal["low", "medium", "high"]
     evidence: str
+
+
+WEIGHT = {"low": 1, "medium": 2, "high": 3}
+
+
+def rule_confidence(factors: list[Factor]) -> tuple[str, dict]:
+    """按规则计算置信度，不用模型自评。
+
+    六类研究信息（不含价格趋势）各自按权重合成一个方向，没有数据的算“缺失”：
+    - high：至少 4 类同向，0 类反向，最多缺 1 类；
+    - medium：至少 3 类同向，最多 1 类反向，最多缺 2 类；
+    - 其余为 low。
+    """
+    detail: dict[str, list[str]] = {"bullish": [], "bearish": [], "neutral": [], "missing": []}
+    for cat in RESEARCH_CATEGORIES:
+        fs = [f for f in factors if f.category == cat and f.data_available]
+        if not fs:
+            detail["missing"].append(cat)
+            continue
+        score = sum(WEIGHT[f.weight] * {"bullish": 1, "bearish": -1, "neutral": 0}[f.signal] for f in fs)
+        detail["bullish" if score > 0 else "bearish" if score < 0 else "neutral"].append(cat)
+    lead, opp = sorted((len(detail["bullish"]), len(detail["bearish"])), reverse=True)
+    missing = len(detail["missing"])
+    if lead >= 4 and opp == 0 and missing <= 1:
+        level = "high"
+    elif lead >= 3 and opp <= 1 and missing <= 2:
+        level = "medium"
+    else:
+        level = "low"
+    return level, detail
 
 
 class Decision(BaseModel):
@@ -139,10 +178,78 @@ def fetch_tbill(timeout: float = 15.0) -> float:
     return float(vals.iloc[-1]) / 100
 
 
+def fetch_etf_flows(days: int = 10, timeout: float = 20.0) -> dict:
+    """美国现货 BTC ETF 每日净流入（百万美元），来自 bitbo.io 的公开表格。"""
+    import html as _html
+    import re
+
+    resp = requests.get("https://bitbo.io/treasuries/etf-flows/", timeout=timeout,
+                        headers={"User-Agent": "Mozilla/5.0"})
+    resp.raise_for_status()
+    t = resp.text[resp.text.find("<table"):resp.text.find("</table>")]
+    rows = []
+    for r in re.findall(r"<tr.*?</tr>", t, re.S):
+        cells = [_html.unescape(re.sub(r"<[^>]+>", "", c)).strip()
+                 for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, re.S)]
+        if len(cells) > 2 and cells[0] != "Date":
+            try:
+                rows.append({"date": pd.Timestamp(cells[0]).date().isoformat(), "total_musd": float(cells[-1])})
+            except ValueError:
+                continue
+    rows = sorted(rows, key=lambda x: x["date"])[-days:]
+    if not rows:
+        raise ValueError("ETF 资金流表格解析失败")
+    return {"source": "bitbo.io", "daily_total_musd": rows,
+            "sum_last_5_days_musd": round(sum(r["total_musd"] for r in rows[-5:]), 1),
+            "sum_last_10_days_musd": round(sum(r["total_musd"] for r in rows), 1)}
+
+
+def fetch_onchain(timeout: float = 20.0) -> dict:
+    """Coin Metrics 社区版：MVRV 和活跃地址数。"""
+    resp = requests.get("https://community-api.coinmetrics.io/v4/timeseries/asset-metrics",
+                        params={"assets": "btc", "metrics": "CapMVRVCur,AdrActCnt", "frequency": "1d",
+                                "page_size": 40, "paging_from": "end"}, timeout=timeout)
+    resp.raise_for_status()
+    d = pd.DataFrame(resp.json()["data"])
+    mvrv, adr = pd.to_numeric(d["CapMVRVCur"]), pd.to_numeric(d["AdrActCnt"])
+    return {"source": "coinmetrics community", "as_of": d["time"].iloc[-1][:10],
+            "mvrv": round(float(mvrv.iloc[-1]), 3), "mvrv_30d_ago": round(float(mvrv.iloc[-31]), 3),
+            "active_addresses_7d_avg": int(adr.tail(7).mean()), "active_addresses_30d_avg": int(adr.tail(30).mean()),
+            "note": "MVRV = 市值 / 已实现市值；历史上 >3 偏热，<1 是深度低估"}
+
+
+def fetch_stablecoins(timeout: float = 20.0) -> dict:
+    """DefiLlama：全部稳定币流通量（美元）。"""
+    resp = requests.get("https://stablecoins.llama.fi/stablecoincharts/all", timeout=timeout)
+    resp.raise_for_status()
+    pts = [float(p["totalCirculatingUSD"]["peggedUSD"]) for p in resp.json()][-31:]
+    return {"source": "defillama", "total_usd_bn": round(pts[-1] / 1e9, 1),
+            "change_30d_pct": round((pts[-1] / pts[0] - 1) * 100, 2)}
+
+
+def fetch_fear_greed(days: int = 7, timeout: float = 20.0) -> list[dict]:
+    resp = requests.get("https://api.alternative.me/fng/", params={"limit": days}, timeout=timeout)
+    resp.raise_for_status()
+    return [{"date": pd.Timestamp(int(x["timestamp"]), unit="s").date().isoformat(), "value": int(x["value"]),
+             "label": x["value_classification"]} for x in reversed(resp.json()["data"])]
+
+
+def structured_data() -> dict:
+    """固定数据源；单个来源失败只记录错误，不影响其他。"""
+    out: dict = {}
+    for name, fn in (("etf_flows", fetch_etf_flows), ("onchain", fetch_onchain),
+                     ("stablecoins", fetch_stablecoins), ("fear_greed", fetch_fear_greed)):
+        try:
+            out[name] = fn()
+        except Exception as err:  # noqa: BLE001
+            out[name] = {"error": str(err)[:200]}
+    return out
+
+
 def market_snapshot(
     close: pd.Series, funding: pd.Series | None = None, tbill: float | None = None,
     sma_days: int = 200, band: float = 0.03, funding_source: str = "hyperliquid",
-    open_interest: dict | None = None,
+    open_interest: dict | None = None, extra: dict | None = None,
 ) -> dict:
     """本地计算的行情快照。close 为已收盘的日线收盘价。"""
     from .today import Plan, regimes
@@ -190,6 +297,8 @@ def market_snapshot(
         snap["perp_open_interest"] = {"source": funding_source, **open_interest}
     if tbill is not None:
         snap["us_3m_tbill"] = round(tbill, 4)
+    if extra:
+        snap["structured_data"] = extra
     return snap
 
 
@@ -211,7 +320,7 @@ SYSTEM_PROMPT = """你是一名审慎的加密资产组合经理，为一位长�
 目标：长期财富增长最大化，同时避免不可挽回的损失（被强平、在大熊市里重仓扛到底）。投资者明确不想错过大的上涨行情，也不想承受大熊市的全部跌幅。
 
 做决定时：
-1. 先阅读用户提供的行情快照（价格、均线、波动、资金费率、持仓量、美债利率都已经给出，不需要再搜索这些）。
+1. 先阅读用户提供的行情快照。价格、均线、波动、资金费率、持仓量、美债利率，以及 structured_data 里的 ETF 每日资金流、MVRV、活跃地址、稳定币总供应、恐惧与贪婪指数，都已经给出（来自固定数据源）。这些不需要再搜索，搜索时把精力放在解释原因和补充其他信息上。
 2. 再用网络搜索和网页抓取，逐项查清下面六类信息在最近 1–2 周的情况。每一类至少尝试一次；搜索结果只有标题或摘要时，抓取原网页读具体数字：
    a. 美国现货 BTC ETF 资金流：最近一周每日净流入 / 流出（例如 Farside Investors 的 ETF 资金流表、The Block、CoinDesk 的报道）；
    b. 衍生品：未平仓合约、期货基差、期权偏度、近期的大规模爆仓（例如 CoinGlass、Deribit、Glassnode 的周报）；
@@ -226,6 +335,9 @@ SYSTEM_PROMPT = """你是一名审慎的加密资产组合经理，为一位长�
 6. 没有足够把握时，保持接近上一次的仓位。频繁大幅调仓本身就是成本。
 7. 只有在你对上涨趋势有较高把握、且下行风险可控时才建议超过 100%。
 8. 诚实：说明主要依据、主要风险，以及什么情况下应该改变决定。
+
+key_factors 的每一条都要标明 category（trend、etf_flows、derivatives、onchain、macro、events、sentiment 之一）和 data_available（这条有没有查到具体、近期的数据）。六类研究信息每类至少写一条，查不到的也要写一条，并标 data_available=false。
+最终的置信度由程序按规则计算：六类里有几类带着数据、指向同一方向。你给出的 confidence 只作为参考记录。
 
 用中文填写所有文字字段，最后按要求的 JSON 结构输出。"""
 
@@ -381,6 +493,7 @@ def build_record(
     model_pct = statistics.median(pcts)
     main = min(decisions, key=lambda d: abs(d.target_position_pct - model_pct))  # 最接近中位数的那次作说明
     final_pct, notes = apply_guardrails(model_pct, previous_pct, snapshot["trend_rule_mode"] == "UP", guardrails)
+    conf, conf_detail = rule_confidence(main.key_factors)
     return {
         "decided_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
         "as_of_close_utc": snapshot["as_of_close_utc"],
@@ -388,7 +501,8 @@ def build_record(
         "model": model, "effort": effort, "samples": pcts,
         "model_pct": model_pct, "previous_pct": previous_pct, "final_pct": final_pct,
         "guardrail_notes": notes, "guardrails": asdict(guardrails),
-        "confidence": main.confidence, "stance": main.stance,
+        "confidence": conf, "model_confidence": main.confidence, "confidence_detail": conf_detail,
+        "stance": main.stance,
         "decision": main.model_dump(), "sources": (sources or [])[:20],
         "snapshot": snapshot, "usage": usage or {}, "estimated_cost_usd": estimated_cost_usd,
     }
@@ -541,6 +655,45 @@ def review_swing(journal: list[dict], close: pd.Series, borrow_rate: float = 0.0
         eq *= g
         out[d] = eq
     return pd.Series(out, name="ai_swing")
+
+
+def calibration(journal: list[dict], close: pd.Series) -> pd.DataFrame:
+    """每个决定之后 7 天、28 天 BTC 的实际涨跌，以及调仓方向对不对（维持不变的不计方向）。"""
+    px = close.dropna()
+    rows = []
+    for r in journal:
+        day = _utc_day(r["decided_at"]) if r.get("track") == "swing" else pd.Timestamp(r["as_of_close_utc"])
+        base = px.loc[:day]
+        if base.empty:
+            continue
+        p0 = float(base.iloc[-1])
+        change = r["final_pct"] - (r["previous_pct"] if r.get("previous_pct") is not None else r["final_pct"])
+        row = {"date": day.date().isoformat(), "track": r.get("track", "weekly"), "confidence": r["confidence"],
+               "change": change}
+        for h in (7, 28):
+            later = px.loc[day + pd.Timedelta(days=h):]
+            fwd = float(later.iloc[0]) / p0 - 1 if len(later) else None
+            row[f"fwd_{h}d"] = fwd
+            row[f"hit_{h}d"] = None if fwd is None or change == 0 else (change > 0) == (fwd > 0)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def calibration_summary(cal: pd.DataFrame) -> str:
+    if cal.empty:
+        return "校准：还没有决定。"
+    lines = [f"校准（{len(cal)} 次决定；每组至少 20 次才有参考价值）"]
+    for conf, g in cal.groupby("confidence"):
+        parts = [f"{conf}: {len(g)} 次"]
+        for h in (7, 28):
+            hits = g[f"hit_{h}d"].dropna()
+            fwd = g[f"fwd_{h}d"].dropna()
+            if len(fwd):
+                parts.append(f"{h} 天后平均涨跌 {fwd.mean():+.1%}")
+            if len(hits):
+                parts.append(f"{h} 天调仓方向正确 {hits.mean():.0%}（{len(hits)} 次）")
+        lines.append("  " + "，".join(parts))
+    return "\n".join(lines)
 
 
 def orders(target_pct: float, price: float, btc: float, cash: float = 0.0, debt: float = 0.0) -> dict:

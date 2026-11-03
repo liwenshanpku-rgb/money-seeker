@@ -16,7 +16,7 @@ CLOSE = pd.Series(np.linspace(60_000, 90_000, len(IDX)), index=IDX)
 def decision_json(pct, conf="medium"):
     return json.dumps({
         "target_position_pct": pct, "confidence": conf, "stance": "测试",
-        "key_factors": [{"factor": "趋势", "signal": "bullish", "weight": "high", "evidence": "高于均线"}],
+        "key_factors": [{"factor": "趋势", "category": "trend", "data_available": True, "signal": "bullish", "weight": "high", "evidence": "高于均线"}],
         "main_risks": ["宏观"], "change_triggers": ["跌破均线"], "review_in_days": 7,
     })
 
@@ -174,7 +174,7 @@ def _snap(as_of="2026-10-25", mode="UP"):
 
 
 ANSWER = {"target_position_pct": 120, "confidence": "low", "stance": "测试",
-          "key_factors": [{"factor": "ETF", "signal": "bearish", "weight": "high", "evidence": "x"}],
+          "key_factors": [{"factor": "ETF", "category": "etf_flows", "data_available": True, "signal": "bearish", "weight": "high", "evidence": "x"}],
           "main_risks": ["r"], "change_triggers": ["t"], "review_in_days": 7}
 
 
@@ -202,3 +202,39 @@ def test_record_from_answer_rejects_stale_snapshot_and_bad_json(tmp_path):
 def test_routine_prompt_has_rules_input_and_schema():
     text = A.routine_prompt(_snap(), [], None)
     assert A.SYSTEM_PROMPT in text and "target_position_pct" in text and "2026-10-25" in text
+
+
+def _f(cat, signal, weight="medium", data=True):
+    return A.Factor(factor=cat, category=cat, data_available=data, signal=signal, weight=weight, evidence="x")
+
+
+def test_rule_confidence_levels():
+    bear4 = [_f(c, "bearish") for c in ("etf_flows", "derivatives", "macro", "sentiment")]
+    level, detail = A.rule_confidence(bear4 + [_f("onchain", "neutral"), _f("events", "neutral", data=False)])
+    assert level == "high" and detail["missing"] == ["events"]
+    level, _ = A.rule_confidence(bear4[:3] + [_f("onchain", "bullish")])
+    assert level == "medium"  # 3 同向 1 反向，缺 2 类
+    level, _ = A.rule_confidence(bear4[:2] + [_f("onchain", "bullish"), _f("sentiment", "bullish")])
+    assert level == "low"
+    # 一类里多条按权重合成；趋势不计入
+    level, d = A.rule_confidence([_f("macro", "bearish", "high"), _f("macro", "bullish", "low"), _f("trend", "bullish")])
+    assert d["bearish"] == ["macro"] and level == "low"
+
+
+def test_record_uses_rule_confidence_and_keeps_model_label(tmp_path):
+    ans = {**ANSWER, "confidence": "high"}
+    rec = A.record_from_answer(ans, _snap(), tmp_path / "d.jsonl", now=datetime(2026, 10, 26, tzinfo=timezone.utc))
+    assert rec["confidence"] == "low" and rec["model_confidence"] == "high"
+    assert rec["confidence_detail"]["bearish"] == ["etf_flows"]
+
+
+def test_calibration_hits_and_summary():
+    close = pd.Series(np.linspace(100, 70, 40), index=pd.date_range("2026-10-01", periods=40, freq="D"))
+    journal = [{"decided_at": "2026-10-02T01:00:00+00:00", "as_of_close_utc": "2026-10-01", "confidence": "low",
+                "previous_pct": 85, "final_pct": 75},
+               {"decided_at": "2026-10-09T01:00:00+00:00", "as_of_close_utc": "2026-10-08", "confidence": "medium",
+                "previous_pct": 75, "final_pct": 75}]
+    cal = A.calibration(journal, close)
+    assert cal.loc[0, "hit_7d"] is True or cal.loc[0, "hit_7d"] == True  # noqa: E712 减仓后价格下跌
+    assert cal.loc[1, "hit_7d"] is None
+    assert "low: 1 次" in A.calibration_summary(cal)

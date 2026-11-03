@@ -757,7 +757,8 @@ def _cmd_ai_snapshot(args: argparse.Namespace) -> None:
     from . import ai_advisor as A
 
     close, funding, tbill, oi, source = _ai_market_inputs(args)
-    snap = A.market_snapshot(close, funding, tbill, funding_source=source, open_interest=oi)
+    snap = A.market_snapshot(close, funding, tbill, funding_source=source, open_interest=oi,
+                             extra=A.structured_data())
     text = json.dumps(snap, ensure_ascii=False, indent=2)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(text + "\n")
@@ -837,6 +838,7 @@ def _cmd_ai_review(args: argparse.Namespace) -> None:
     if len(curves) < 180:
         print("! 样本不到半年，结果主要是噪音，不要据此下结论。")
     swing = A.read_journal(args.swing_journal) if args.swing_journal else []
+    print("\n" + A.calibration_summary(A.calibration(journal + swing, close)))
     if swing:
         sc = A.review_swing(swing, close, borrow_rate=args.borrow_rate)
         base = sc.index[0] - pd.Timedelta(days=1)

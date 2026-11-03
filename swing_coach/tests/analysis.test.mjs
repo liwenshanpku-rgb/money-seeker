@@ -1,9 +1,9 @@
 // 运行：node --test swing_coach/tests/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { syntheticSwing, PRO_PARAMS, POSITIONS } from '../web/js/template.js';
-import { detectPhases } from '../web/js/phases.js';
-import { makeContext, evaluate, summarize } from '../web/js/metrics.js';
+import { syntheticSwing, PRO_PARAMS, PRO_TIMING, POSITIONS } from '../web/js/template.js';
+import { detectPhases, findSwings } from '../web/js/phases.js';
+import { makeContext, evaluate, summarize, aggregateResults, representativeIndex } from '../web/js/metrics.js';
 
 function run({ view = 'fo', club = 'iron', handed = 'right', table, noise = 0.002, timing } = {}) {
   const s = syntheticSwing({ view, club, handed, table, noise, timing });
@@ -198,4 +198,57 @@ test('所有职业球员骨架数据：P1–P10 顺序正确，非参考指标�
     }
   }
   assert.ok(n >= 2);
+});
+
+test('长视频：找出连续的每一杆', () => {
+  // 三杆首尾相接（每杆前后各静止 2–3 秒），按 8fps 粗扫
+  const frames = [];
+  const peaks = [];
+  let offset = 0;
+  for (const seed of [1, 2, 3]) {
+    const s = syntheticSwing({ view: 'dtl', fps: 8, lead: 3, tail: 2, noise: 0.002, seed });
+    // 两杆之间：用 1.5 秒从收杆姿势慢慢回到准备姿势（放下球杆、重新站位）
+    if (frames.length) {
+      const a = frames[frames.length - 1], b = s.frames[0];
+      for (let k = 1; k <= 12; k++) {
+        const f = k / 13;
+        frames.push({ t: a.t + k / 8, lm: a.lm.map((p, j) => ({ ...p, x: p.x + (b.lm[j].x - p.x) * f, y: p.y + (b.lm[j].y - p.y) * f })) });
+      }
+      offset = frames[frames.length - 1].t + 1 / 8;
+    }
+    for (const f of s.frames) frames.push({ ...f, t: f.t + offset });
+    peaks.push(offset + 3 + PRO_TIMING.P7); // lead + P7
+  }
+  const found = findSwings(frames, {});
+  assert.equal(found.length, 3);
+  found.forEach((w, i) => {
+    assert.ok(Math.abs(w.peak - peaks[i]) < 0.3, `第 ${i + 1} 杆击球时间 ${w.peak}，应为 ${peaks[i]}`);
+    assert.ok(w.start < peaks[i] - 1.4 && w.end > peaks[i] + 0.6, '窗口应包含上杆和送杆');
+  });
+  // 按窗口截出的片段（相对这一杆的时间）能完成 P1–P10 分析
+  const one = syntheticSwing({ view: 'dtl', fps: 30, lead: 3, tail: 2 });
+  const shift = found[1].peak - (3 + PRO_TIMING.P7);
+  const sub = one.frames.filter((f) => f.t >= found[1].start - shift && f.t <= found[1].end - shift);
+  const det = detectPhases(sub, {});
+  assert.ok(Math.abs(sub[det.P.P7].t - (3 + PRO_TIMING.P7)) < 0.1);
+});
+
+test('长视频：没有挥杆（只是走动）时不误报', () => {
+  const s = syntheticSwing({ view: 'dtl', fps: 8, lead: 3, tail: 2 });
+  // 双手始终低于肩：把每帧都替换成准备姿势并左右平移
+  const still = s.frames.map((f, i) => ({ ...f, lm: s.frames[0].lm.map((p) => ({ ...p, x: p.x + 0.05 * Math.sin(i / 3) })) }));
+  assert.equal(findSwings(still, {}).length, 0);
+});
+
+test('多杆综合：取中位数并重新评分', () => {
+  const runs = [0.002, 0.004, 0.003].map((noise, i) => run({ view: 'dtl', noise, timing: undefined }).results);
+  // 第三杆的节奏改成明显偏快，中位数仍应达标
+  runs[2] = runs[2].map((r) => (r.id === 'tempo' ? { ...r, value: 1.2, status: 'bad', side: 'low' } : r));
+  const agg = aggregateResults(runs);
+  const tempo = agg.find((r) => r.id === 'tempo');
+  assert.equal(tempo.status, 'good');
+  assert.equal(tempo.n, 3);
+  assert.equal(tempo.spread[0], 1.2);
+  assert.equal(agg.length, runs[0].length);
+  assert.notEqual(representativeIndex(runs, agg), 2);
 });

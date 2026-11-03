@@ -656,3 +656,36 @@ function countBy(results) {
   for (const r of results) c[r.status]++;
   return c;
 }
+
+// 多杆综合：每一项取各杆数值的中位数再按区间评分，附上最小–最大值看动作是否稳定。
+// 一半以上的杆都测不出来的项，标为无法判断。lists 是同一视角每杆 evaluate 的结果（顺序一致）。
+export function aggregateResults(lists) {
+  return lists[0].map((r0, k) => {
+    const rs = lists.map((l) => l[k]);
+    const vals = rs.filter((r) => r.status !== 'na' && Number.isFinite(r.value)).map((r) => r.value).sort((a, b) => a - b);
+    const base = { metric: r0.metric, id: r0.id, pos: r0.pos, view: r0.view, range: r0.range, n: vals.length, of: rs.length };
+    if (vals.length * 2 < rs.length || !vals.length) {
+      const oblique = rs.some((r) => r.oblique);
+      return { ...base, value: NaN, visibility: 0, status: 'na', severity: 0, oblique, lowVis: !oblique, advice: null };
+    }
+    const m = vals.length >> 1;
+    const value = vals.length % 2 ? vals[m] : (vals[m - 1] + vals[m]) / 2;
+    let g = grade(value, r0.range);
+    if (r0.metric.ref) g = { status: 'ref', severity: 0 };
+    return { ...base, value, visibility: 1, ...g, advice: g.side ? r0.metric[g.side] : null, spread: [vals[0], vals[vals.length - 1]] };
+  });
+}
+
+// 最有代表性的一杆：各项数值离中位数最近（按区间宽度归一）
+export function representativeIndex(lists, agg) {
+  let best = 0, bestD = Infinity;
+  lists.forEach((l, j) => {
+    let d = 0;
+    l.forEach((r, k) => {
+      const a = agg[k];
+      if (Number.isFinite(r.value) && Number.isFinite(a.value)) d += Math.abs(r.value - a.value) / ((a.range[1] - a.range[0]) || 1);
+    });
+    if (d < bestD) { bestD = d; best = j; }
+  });
+  return best;
+}

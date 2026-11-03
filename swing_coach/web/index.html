@@ -35,6 +35,7 @@
             <span class="range">区间 <input type="number" id="start-fo" min="0" step="0.1" value="0"> – <input type="number" id="end-fo" min="0" step="0.1"> 秒</span>
             <label for="file-fo" class="link">更换</label>
             <button type="button" class="link-btn" data-clear="fo">移除</button>
+            <span class="muted small slot-note" id="note-fo"></span>
           </div>
         </div>
         <div class="slot" data-view="dtl">
@@ -48,10 +49,11 @@
             <span class="range">区间 <input type="number" id="start-dtl" min="0" step="0.1" value="0"> – <input type="number" id="end-dtl" min="0" step="0.1"> 秒</span>
             <label for="file-dtl" class="link">更换</label>
             <button type="button" class="link-btn" data-clear="dtl">移除</button>
+            <span class="muted small slot-note" id="note-dtl"></span>
           </div>
         </div>
       </div>
-      <p class="muted small slot-tip">只有一个角度也可以分析；正面 + 侧面一起上传，结果最完整（两段可以是不同的挥杆）。全身入镜，3–10 秒，最好 60fps 以上。</p>
+      <p class="muted small slot-tip">只有一个角度也可以分析；正面 + 侧面一起上传，结果最完整（两段可以是不同的挥杆）。全身入镜，最好 60fps 以上。<br>一个人练习时：把手机架在身后连续打几杆，录成一段长视频（最长 3 分钟）上传，会自动找出每一杆分别分析，再综合成一份结果。</p>
 
       <div class="settings">
         <label>惯用手
@@ -93,6 +95,7 @@
         <div class="facts" id="facts"></div>
         <div class="counts" id="counts"></div>
         <p class="muted small missing-view" id="missingView" hidden></p>
+        <div class="swing-picker" id="swingPicker" hidden></div>
         <div class="summary-actions"><button id="newAnalysis">↺ 分析新视频</button></div>
       </div>
 

@@ -205,3 +205,52 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
 }
 
 export { sides };
+
+// 长视频里找出每一次挥杆（例如三脚架架在身后，连续打了好几杆）。
+// 用低帧率粗扫一遍的关键点：双手速度的峰值在击球附近；之前 2.5 秒内、之后 1.5 秒内双手都举过肩
+//（排除走动、试挥的小动作和收杆后放下球杆），两次击球至少相隔 2.5 秒。粗扫帧率低，峰值可能落在击球前后一两帧，
+// 所以窗口前后多留一些。返回每一杆的大致时间窗口（秒），再用正常帧率逐杆精细分析。
+export function findSwings(rawFrames, { handed = 'right', before = 2.5, after = 1.8 } = {}) {
+  const frames = smoothFrames(rawFrames, 0.15);
+  const n = frames.length;
+  if (n < 5) return [];
+  const t = frames.map((f) => f.t);
+  const B = frames.map((f) => body(f.lm, handed));
+  const speed = B.map((_, i) => {
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+    return dist(B[a].hands, B[b].hands) / ((t[b] - t[a]) || 1);
+  });
+  const vmax = Math.max(...speed);
+  if (!(vmax > 0)) return [];
+  const raised = (i) => {
+    for (let j = i; j >= 0 && t[i] - t[j] <= 2.5; j--) if (B[j].hands.y < B[j].shoulderMid.y) return true;
+    return false;
+  };
+  // 击球前后双手先落到肩下，之后 1.5 秒内再举过肩（送杆、收杆）；收杆后放下球杆只有下落、没有再举起。
+  // 视频在击球后不久就结束的不要求
+  const up = (j) => B[j].hands.y < B[j].shoulderMid.y;
+  const finished = (i) => {
+    if (t[n - 1] - t[i] < 0.8) return true;
+    let low = false;
+    for (let j = i; j > 0 && t[i] - t[j] <= 0.3; j--) if (!up(j)) low = true;
+    for (let j = i; j < n && t[j] - t[i] <= 1.5; j++) {
+      if (!up(j)) low = true;
+      else if (low) return true;
+    }
+    return false;
+  };
+  const peaks = [];
+  for (let i = 1; i < n - 1; i++) {
+    // 收杆后放下球杆、走动等动作不满足「之前举过肩、之后又举过肩、速度够快」
+    if (speed[i] < 0.35 * vmax || speed[i] < speed[i - 1] || speed[i] < speed[i + 1]) continue;
+    if (!raised(i) || !finished(i)) continue;
+    const last = peaks[peaks.length - 1];
+    if (last && t[i] - t[last] < 2.5) { if (speed[i] > speed[last]) peaks[peaks.length - 1] = i; continue; }
+    peaks.push(i);
+  }
+  return peaks.map((i, k) => ({
+    peak: t[i],
+    start: Math.max(t[0], t[i] - before, k > 0 ? t[peaks[k - 1]] + 1.2 : -Infinity),
+    end: Math.min(t[n - 1], t[i] + after, k < peaks.length - 1 ? t[peaks[k + 1]] - 2 : Infinity),
+  }));
+}

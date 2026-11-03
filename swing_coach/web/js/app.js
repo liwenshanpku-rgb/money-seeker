@@ -2,7 +2,7 @@
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases, detectView } from './phases.js';
-import { makeContext, evaluate, summarize, formatValue } from './metrics.js';
+import { makeContext, evaluate, summarize, formatValue, transitionIndex } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
   alignTemplate, templateHandPath, cropBox, drawFrame, drawHandPath, drawTimeline, frameSource, blankSource, imageSource, COLORS,
@@ -283,14 +283,25 @@ function renderSummary() {
     ['节奏 上杆:下杆', list.map((a) => (multi() ? `${VIEW_SHORT[a.view]} ${tempoText(a)}` : tempoText(a))).join('，')],
     ...list.map((a) => {
       const t = (p) => a.frames[a.P[p]].t;
-      return [`上杆 / 下杆用时${multi() ? `（${VIEW_SHORT[a.view]}）` : ''}`, `${(t('P4') - t('P1')).toFixed(2)}s / ${(t('P7') - t('P4')).toFixed(2)}s`];
+      // 和节奏一致：下杆从双手开始下落算起
+      const tt = a.frames[transitionIndex(a.frames, a.P, a.settings.handed)].t;
+      return [`上杆 / 下杆用时${multi() ? `（${VIEW_SHORT[a.view]}）` : ''}`, `${(tt - t('P1')).toFixed(2)}s / ${(t('P7') - tt).toFixed(2)}s`];
     }),
     ...(first.demo ? [['数据来源', '示例合成挥杆']] : []),
     ['对比模板', state.pro ? `内置职业模板 + ${state.pro.name}` : '内置职业模板'],
   ].map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('');
+  // 只有一个角度时，说明另一个角度才能看的项目，避免误以为这些都没问题
+  const only = list.length === 1 ? list[0].view : null;
+  $('missingView').hidden = !only;
+  if (only) $('missingView').innerHTML = `<b>这次没有${only === 'dtl' ? '正面' : '侧面'}视频，以下项目没有检查：</b>${MISSING_TEXT[only]}。`;
   $('counts').innerHTML = ['good', 'warn', 'bad', 'na', 'ref'].filter((s) => s !== 'ref' || counts.ref)
     .map((s) => `<div><span class="chip ${s}">${STATUS_TEXT[s]}</span> ${counts[s]} 项</div>`).join('');
 }
+
+const MISSING_TEXT = {
+  dtl: '站位宽度、骨盆左右移动和重心转移、头部左右移动、脊柱侧倾、击球时手领先、前腿支撑、送杆伸展。侧面视频拍不出朝目标方向的动作，这些只能从正面看；下次可以请朋友站到你正前方拍一杆',
+  fo: '脊柱前倾和保持、提前伸展（臀部靠近球）、头部高度变化、膝盖弯曲、下杆双手路径（由外向内）。这些只能从侧面看；下次可以请朋友站到你身后、沿目标线方向拍一杆',
+};
 
 function renderPriorities() {
   const pr = combined().summary.priorities;

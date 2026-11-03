@@ -90,6 +90,16 @@ export function rotationSeries(frames, P, { view, dir, handed, kind }) {
   return out;
 }
 
+// 下杆真正开始的帧：双手从最高点下降超过挥杆高度的 6%。很多人双手到顶后杆头还在继续上行
+//（手腕继续屈），按双手最高点算会把这段时间算进下杆，节奏比偏低。
+export function transitionIndex(frames, P, handed) {
+  const y = (i) => body(frames[i].lm, handed).hands.y;
+  const top = y(P.P4), h = y(P.P7) - top;
+  let i = P.P4;
+  while (i < P.P7 - 1 && y(i + 1) - top < 0.06 * h) i++;
+  return i;
+}
+
 // 指标计算所需的上下文
 export function makeContext(frames, P, { view, dir, handed, club }) {
   const B = (pos) => body(frames[P[pos]].lm, handed);
@@ -125,14 +135,22 @@ export function makeContext(frames, P, { view, dir, handed, club }) {
       for (let i = Math.max(P.P3, 1); i <= end && i < s.length - 1; i++) best = Math.max(best, med(i));
       return best;
     },
-    // 下杆真正开始的帧：双手从最高点下降超过挥杆高度的 6%。很多人双手到顶后杆头还在继续上行
-    //（手腕继续屈），按双手最高点算会把这段时间算进下杆，节奏比偏低。
-    transition: () => {
-      const y = (i) => body(frames[i].lm, handed).hands.y;
-      const top = y(P.P4), h = y(P.P7) - top;
-      let i = P.P4;
-      while (i < P.P7 - 1 && y(i + 1) - top < 0.06 * h) i++;
-      return i;
+    transition: () => transitionIndex(frames, P, handed),
+    // 侧面：同一高度下，下杆时双手比上杆时更靠近球（正，偏外）还是更靠近身体（负，偏内），躯干长度为单位。
+    // 取双手在上杆 50%–75% 高度之间几个高度的平均；更低处下杆双手本来就会向球伸出，不比较。
+    downPath: () => {
+      const hands = (i) => body(frames[i].lm, handed).hands;
+      const y1 = hands(P.P1).y, y4 = hands(P.P4).y;
+      const lev = (i) => (y1 - hands(i).y) / (y1 - y4 || 1e-6);
+      const xAt = (lo, hi, L, rising) => {
+        for (let i = lo; i < hi; i++) {
+          const a = lev(i), b = lev(i + 1);
+          if (rising ? a < L && b >= L : a > L && b <= L) return hands(i).x + (hands(i + 1).x - hands(i).x) * ((L - a) / (b - a));
+        }
+        return NaN;
+      };
+      const d = [0.5, 0.6, 0.7, 0.75].map((L) => (xAt(P.P1, P.P4, L, true) - xAt(ctx.transition(), P.P7, L, false)) * -dir / torso).filter(Number.isFinite);
+      return d.length ? d.reduce((a, b) => a + b, 0) / d.length : NaN;
     },
   };
   return ctx;
@@ -469,6 +487,15 @@ export const METRICS = [
     about: '上杆顶点肩部绕脊柱转过的角度（由 3D 关键点估算），职业球员约 90°。',
     low: { issue: '上杆肩部转动不足', why: '蓄力不够，下杆容易用手臂发力、由外向内。', fix: '上杆到顶时前肩转到下巴下方，背部对着目标。', drill: '双臂交叉抱胸做转体，直到背部正对目标；再带杆做同样的感觉。' },
     high: null,
+  },
+  {
+    id: 'dtl_p5_path', view: 'dtl', pos: 'P5', name: '下杆双手路径（由外向内）', unit: '× 躯干', digits: 2,
+    points: ['leadWrist', 'trailWrist'],
+    value: (c) => c.downPath(),
+    range: { iron: [-0.4, 0.18], driver: [-0.4, 0.18] },
+    about: '同一高度下，下杆时双手比上杆时更靠近球（正值，偏外）还是更靠近身体（负值，偏内），取双手在上杆一半到四分之三高度之间的平均。职业球员下杆双手走在上杆路线上或略靠内（约 -0.3 ~ +0.1）。只看双手、不含杆身，是近似判断。',
+    low: { issue: '下杆双手过于靠内', why: '双手从身体后方掉得太深，杆头容易从过内侧接近球，打出右推或左曲。', fix: '转换时让前臂和身体一起转动，双手沿上杆路线回落即可，不要刻意往身后压。', drill: '在身后约一臂远放一个泡沫棒或空杆包，下杆双手不要碰到它。' },
+    high: { issue: '下杆由外向内（over the top）', why: '下杆一开始就用肩膀和手臂把杆甩出去，双手走到上杆路线外侧，杆头由外向内切球，常见左拉、右曲（slice）。', fix: '转换时先让下半身启动、双手先向下落到后肩下方，再转身击球；感觉后肘贴近身体侧面。', drill: '在球外侧约一个杆头远放一个球座或空杆盒，下杆不要碰到它；配合上杆到顶后停 1 秒、先落手再转身的慢速挥杆。' },
   },
   {
     id: 'dtl_p6_hips', view: 'dtl', pos: 'P6', name: '下杆臀部位置（提前伸展）', unit: '× 躯干', digits: 2,

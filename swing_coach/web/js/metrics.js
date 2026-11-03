@@ -156,6 +156,35 @@ export function makeContext(frames, P, { view, dir, handed, club }) {
   return ctx;
 }
 
+// TPI（Titleist Performance Institute）总结的常见挥杆问题，以及常见的身体限制和自测方法。
+// 自测只作参考：做不好说明可能受身体条件限制，单靠改动作很难改过来，可以先做针对性的灵活性 / 力量练习。
+export const TPI = {
+  early_extension: { name: '提前伸展（Early Extension）', screen: '常和髋关节灵活性、臀部力量不足有关。自测：双手举杆过头、脚跟着地深蹲，蹲不到大腿接近水平或上身明显前倒，说明髋 / 踝灵活性受限；单腿臀桥坚持 10 秒检查臀部力量。' },
+  sway: { name: '上杆侧移（Sway）', screen: '后侧髋关节向内转动不足时，身体会用侧移代替转动。自测：坐在椅子上，小腿向外摆做髋内旋，两侧幅度明显偏小或左右差距大，多做髋内旋拉伸。' },
+  slide: { name: '下杆滑动（Slide）', screen: '前侧髋内旋不足或下半身稳定性差。自测：同上的髋内旋测试看前侧；闭眼单腿站立 10 秒检查平衡。' },
+  hanging_back: { name: '重心留在后脚（Hanging Back）', screen: '前腿支撑力量或前侧髋内旋不足，身体不敢把重心交给前脚。自测：前腿单腿站立 10 秒、单腿下蹲 5 次，晃动或膝盖内扣说明支撑不足。' },
+  reverse_spine: { name: '反向脊柱角（Reverse Spine Angle）', screen: '上背（胸椎）转动不足时，上身会用侧倾代替转动。自测：坐在椅子上双臂抱杆于胸前转身，每侧转不到约 45° 说明胸椎转动受限。' },
+  loss_of_posture: { name: '失去姿态（Loss of Posture）', screen: '常和骨盆控制、髋关节灵活性有关。自测：摆好准备姿势，只动骨盆做前倾、后倾，做不出来或要靠腰背代偿，说明骨盆控制不足。' },
+  over_the_top: { name: '由外向内（Over the Top）', screen: '上下身分离能力差（髋先动、肩跟不住），或胸椎转动不足。自测：准备姿势双手抱胸，肩膀不动只转髋，做不到说明上下身分离受限。' },
+  flat_shoulder: { name: '肩部平转（Flat Shoulder Plane）', screen: '常和胸椎灵活性不足、准备时前倾太少有关。自测：同上的坐姿转身测试；背靠墙站立，双臂贴墙上举，手臂贴不到墙说明上背伸展受限。' },
+  chicken_wing: { name: '鸡翅膀（Chicken Winging）', screen: '常和前肩向外转动不足、或下杆身体停转有关。自测：仰卧，前臂外展 90°、肘弯 90°，前臂向后（地面方向）转，接近不了地面说明肩外旋受限。' },
+  late_buckle: { name: '前膝后期弯曲（Late Buckle）', screen: '前腿蹬地力量或髋内旋不足。自测：前腿单腿下蹲 5 次，膝盖内扣或晃动说明前腿支撑不足。' },
+};
+// 哪项检查的哪一侧对应 TPI 的哪种问题
+const TPI_MAP = {
+  fo_p2_sway: { high: 'sway' }, fo_p4_sway: { high: 'sway' },
+  fo_p4_tilt: { low: 'reverse_spine' },
+  fo_p5_shift: { low: 'hanging_back', high: 'slide' }, fo_p6_shift: { low: 'hanging_back', high: 'slide' }, fo_p7_shift: { low: 'hanging_back', high: 'slide' },
+  fo_p7_tilt: { high: 'hanging_back' },
+  fo_p8_leadelbow: { low: 'chicken_wing' }, fo_p8_leadknee: { low: 'late_buckle' },
+  dtl_p4_bend: { low: 'loss_of_posture', high: 'loss_of_posture' }, dtl_p7_bend: { low: 'loss_of_posture', high: 'loss_of_posture' },
+  dtl_p4_head: { low: 'loss_of_posture', high: 'loss_of_posture' }, dtl_p7_head: { low: 'loss_of_posture', high: 'loss_of_posture' },
+  dtl_p4_hips: { high: 'early_extension' }, dtl_p6_hips: { high: 'early_extension' }, dtl_p7_hips: { high: 'early_extension' },
+  dtl_p4_shoulderplane: { low: 'flat_shoulder' },
+  dtl_p5_path: { high: 'over_the_top' },
+};
+const tpiFor = (id, side) => (side ? TPI[TPI_MAP[id]?.[side]] || null : null);
+
 // 指标定义。range 可按球杆区分；low/high 分别是低于、高于区间时的诊断。
 export const METRICS = [
   // ---------------- 正面（face-on） ----------------
@@ -384,7 +413,25 @@ export const METRICS = [
     value: (c) => { const b = c.B('P8'); return angleAt(b.trailShoulder, b.trailElbow, b.trailWrist); },
     range: { iron: [140, 181], driver: [140, 181] },
     about: '击球后后臂（右手球员的右臂）应完全伸展，双臂指向目标。',
-    low: { issue: '送杆手臂收缩（「鸡翅」）', why: '击球时减速或身体停止转动，杆面不稳定、距离损失。', fix: '击球后继续转身，让双臂向目标方向伸展。', drill: '击球后停在 P8：双臂伸直、杆身与地面平行、杆头趾部朝上。' },
+    low: { issue: '送杆后臂没有伸展', why: '击球时减速或身体停止转动，杆面不稳定、距离损失。', fix: '击球后继续转身，让双臂向目标方向伸展。', drill: '击球后停在 P8：双臂伸直、杆身与地面平行、杆头趾部朝上。' },
+    high: null,
+  },
+  {
+    id: 'fo_p8_leadelbow', view: 'fo', pos: 'P8', name: '送杆前臂伸展（鸡翅膀）', unit: '°', digits: 0,
+    points: ['leadShoulder', 'leadElbow', 'leadWrist'],
+    value: (c) => { const b = c.B('P8'); return angleAt(b.leadShoulder, b.leadElbow, b.leadWrist); },
+    range: { iron: [140, 181], driver: [140, 181] },
+    about: '击球后杆身与地面平行（P8）时，前臂（右手球员的左臂）的伸直程度。职业球员约 155°–175°，前臂随身体转动自然伸展。',
+    low: { issue: '送杆时前臂弯折（鸡翅膀）', why: '前肘向外弯、把杆往身体拉，常伴随身体停转、杆面打开，容易右曲或打薄，距离也会损失。', fix: '击球后让前臂随身体继续转向目标、自然伸展，再向上折叠；胸口转向目标，不要用手把杆拉回来。', drill: '前侧腋下夹一条毛巾做半挥杆，送杆到 P8 时毛巾不能掉，体会手臂和身体一起转。' },
+    high: null,
+  },
+  {
+    id: 'fo_p8_leadknee', view: 'fo', pos: 'P8', name: '送杆前膝（后期弯曲）', unit: '°', digits: 0,
+    points: ['leadHip', 'leadKnee', 'leadAnkle'],
+    value: (c) => { const b = c.B('P8'); return angleAt(b.leadHip, b.leadKnee, b.leadAnkle); },
+    range: { iron: [158, 181], driver: [158, 181] },
+    about: '击球后（P8）前腿膝盖的角度。职业球员击球时前腿基本蹬直并保持（约 170°–180°），送杆中不会再向前弯。',
+    low: { issue: '击球后前膝向前弯曲', why: '前腿没有蹬地支撑，击球后膝盖向目标弯下去，身体前倒、转动停止，速度和稳定性都会下降。', fix: '下杆时用前脚把地面往下踩、前膝向后伸直，让髋部绕着前腿转过去。', drill: '做 3/4 挥杆，收杆时停住检查前腿是否伸直；熟练后再逐步加大幅度。' },
     high: null,
   },
   {
@@ -487,6 +534,19 @@ export const METRICS = [
     about: '上杆顶点肩部绕脊柱转过的角度（由 3D 关键点估算），职业球员约 90°。',
     low: { issue: '上杆肩部转动不足', why: '蓄力不够，下杆容易用手臂发力、由外向内。', fix: '上杆到顶时前肩转到下巴下方，背部对着目标。', drill: '双臂交叉抱胸做转体，直到背部正对目标；再带杆做同样的感觉。' },
     high: null,
+  },
+  {
+    id: 'dtl_p4_shoulderplane', view: 'dtl', pos: 'P4', name: '上杆肩部平面', unit: '°', digits: 0,
+    points: ['leadShoulder', 'trailShoulder', 'leadHip', 'trailHip'],
+    value: (c) => {
+      const b = c.B('P4');
+      const tilt = deg(Math.atan2(Math.abs(b.leadShoulder.y - b.trailShoulder.y), Math.abs(b.leadShoulder.x - b.trailShoulder.x)));
+      return tilt - c.spineBend(b);
+    },
+    range: { iron: [-10, 15], driver: [-10, 15] },
+    about: '侧面看上杆顶点肩线的倾斜角减去脊柱前倾角。肩部绕脊柱转动时，肩线倾斜约等于脊柱前倾角（职业球员差值约 -2° ~ +6°）；明显偏小是肩部「平转」。',
+    low: { issue: '肩部平转', why: '肩部转得太水平，上杆平面变平、身体容易起立，下杆常要补偿，出现由外向内或打薄。', fix: '上杆时让前肩向下、朝球的方向转，感觉胸口对着地面转，而不是水平地转。', drill: '双臂交叉把杆贴在胸前，摆好准备姿势转体：转到顶时杆的前端应指向球附近的地面，而不是指向远处。' },
+    high: { issue: '肩部转动过陡', why: '前肩压得过低，常伴随反向脊柱角或身体下压，下杆容易过陡、打厚。', fix: '保持脊柱前倾，让肩部绕脊柱转动即可，不要刻意压前肩。', drill: '同样用胸前抱杆练习，转到顶时杆的前端指向球附近的地面。' },
   },
   {
     id: 'dtl_p5_path', view: 'dtl', pos: 'P5', name: '下杆双手路径（由外向内）', unit: '× 躯干', digits: 2,
@@ -623,7 +683,7 @@ export function evaluate(ctx) {
     // 单机位估算误差大的指标只作参考：不按绝对区间打分（选了职业球员时改为和他对比，见 compareToPro）
     if (m.ref && g.status !== 'na') g = { status: 'ref', severity: 0 };
     const advice = g.side ? m[g.side] : null;
-    results.push({ metric: m, id: m.id, pos: m.pos, value, range, visibility, ...g, advice });
+    results.push({ metric: m, id: m.id, pos: m.pos, value, range, visibility, ...g, advice, tpi: advice ? tpiFor(m.id, g.side) : null });
   }
   return results;
 }
@@ -672,7 +732,8 @@ export function aggregateResults(lists) {
     const value = vals.length % 2 ? vals[m] : (vals[m - 1] + vals[m]) / 2;
     let g = grade(value, r0.range);
     if (r0.metric.ref) g = { status: 'ref', severity: 0 };
-    return { ...base, value, visibility: 1, ...g, advice: g.side ? r0.metric[g.side] : null, spread: [vals[0], vals[vals.length - 1]] };
+    const advice = g.side ? r0.metric[g.side] : null;
+    return { ...base, value, visibility: 1, ...g, advice, tpi: advice ? tpiFor(r0.id, g.side) : null, spread: [vals[0], vals[vals.length - 1]] };
   });
 }
 

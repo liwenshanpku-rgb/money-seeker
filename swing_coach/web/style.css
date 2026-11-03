@@ -79,6 +79,7 @@ canvas { width: 100%; height: auto; display: block; border-radius: 10px; backgro
 .link-btn { border: none; background: none; padding: 0; color: var(--bad); font-size: 13px; }
 .slot-tip { margin: 10px 0 0; }
 .summary-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.missing-view { grid-column: 1 / -1; margin: 0; line-height: 1.6; }
 .paths { display: grid; gap: 10px; }
 #scrubView { margin-bottom: 8px; width: auto; }
 .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); margin-right: 4px; white-space: nowrap; }

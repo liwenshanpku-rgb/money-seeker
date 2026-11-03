@@ -63,6 +63,24 @@ test('侧面：识别提前伸展（臀部顶向球、起身）', () => {
   assert.notEqual(byId.dtl_p6_hips.status, 'good');
 });
 
+test('侧面：识别下杆由外向内（双手走到上杆路线外侧）', () => {
+  const s = syntheticSwing({ view: 'dtl', noise: 0 });
+  const { dir } = detectPhases(s.frames, {});
+  const lm1 = s.frames[s.truth.P1].lm;
+  const torso = Math.abs((lm1[23].y + lm1[24].y) / 2 - (lm1[11].y + lm1[12].y) / 2);
+  // 下杆过程中把双手、手肘向球的方向推出去，P4→P7 中段最多 0.35 个躯干长度
+  const a = s.truth.P4, b = s.truth.P7;
+  for (let i = a; i <= b; i++) {
+    const k = 0.35 * torso * Math.sin((Math.PI * (i - a)) / (b - a));
+    for (const j of [13, 14, 15, 16]) s.frames[i].lm[j] = { ...s.frames[i].lm[j], x: s.frames[i].lm[j].x + k * dir };
+  }
+  const det = detectPhases(s.frames, {});
+  const ctx = makeContext(det.frames, det.P, { view: det.view, dir: det.dir, handed: 'right', club: 'iron' });
+  const r = evaluate(ctx).find((x) => x.id === 'dtl_p5_path');
+  assert.equal(r.side, 'high', String(r.value));
+  assert.notEqual(r.status, 'good');
+});
+
 test('节奏：上杆过快时提示', () => {
   const timing = { P1: 0, P2: 0.1, P3: 0.2, P4: 0.32, P5: 0.46, P6: 0.53, P7: 0.6, P8: 0.68, P9: 0.8, P10: 1.2 };
   const { byId } = run({ timing });

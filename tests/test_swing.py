@@ -40,7 +40,7 @@ def test_check_quiet_market_and_72h_rule():
 
 
 ANSWER = {"target_position_pct": 60, "confidence": "low", "stance": "测试",
-          "key_factors": [{"factor": "x", "signal": "bearish", "weight": "high", "evidence": "x"}],
+          "key_factors": [{"factor": "x", "category": "macro", "data_available": True, "signal": "bearish", "weight": "high", "evidence": "x"}],
           "main_risks": ["r"], "change_triggers": ["t"], "review_in_days": 7}
 SNAP = {"as_of_close_utc": "2026-10-29", "btc_close_usd": 80000.0, "trend_rule_mode": "UP"}
 TRIG = {"checked_at": "2026-10-30T18:00+00:00", "price": 77000.0, "reasons": ["24 小时 -5.5%"]}

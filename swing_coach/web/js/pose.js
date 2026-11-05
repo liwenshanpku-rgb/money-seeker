@@ -67,7 +67,12 @@ export function primeVideo(video) {
 export async function ensureReady(video) {
   if (video.readyState < 1) await once(video, ['loadedmetadata', 'error'], 8000);
   if (video.readyState < 2) await once(video, ['loadeddata', 'canplay', 'error'], 8000);
-  if (video.readyState < 2) throw new Error('视频无法解码。iPhone 拍的 HEVC 视频在部分安卓或电脑浏览器上无法播放，请在拍摄设置里改用「兼容性最佳」（H.264）后重拍或转码');
+  if (video.readyState < 2) {
+    const apple = /iPhone|iPad|Macintosh/.test(navigator.userAgent);
+    throw new Error(apple
+      ? '视频读取失败。请刷新页面后重新选择这段视频；仍然不行的话，换一段视频或重新拍一段再试'
+      : '视频无法解码。iPhone 拍的 HEVC 视频在部分安卓或电脑浏览器上无法播放，请在 iPhone「设置 → 相机 → 格式」里改用「兼容性最佳」（H.264）后重拍，或转码后再上传');
+  }
 }
 
 // 跳到时间 t 并等这一帧真正解码出来。目标时间和当前时间相同时浏览器不会触发 seeked，需单独处理；

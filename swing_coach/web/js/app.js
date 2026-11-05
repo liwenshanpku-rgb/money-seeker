@@ -67,11 +67,19 @@ function addVideo(file) {
   const video = document.createElement('video');
   Object.assign(video, { muted: true, playsInline: true, preload: 'auto' });
   video.setAttribute('playsinline', '');
-  video.src = `${f.url}#t=0.1`; // 让缩略图显示第一帧附近的画面
+  video.setAttribute('muted', '');
+  // 注意：不要在 blob 地址后加 #t= 之类的片段，iPhone Safari 会因此读不出视频
+  video.src = f.url;
   f.video = video;
   files.push(f);
   video.onloadedmetadata = () => {
     f.duration = videoDuration(video);
+    // 缩略图显示开头附近的一帧（有的浏览器停在第 0 帧是黑屏）
+    try { video.currentTime = Math.min(0.1, f.duration / 2); } catch { /* 忽略 */ }
+    renderVideoList();
+  };
+  video.onerror = () => {
+    f.error = true;
     renderVideoList();
   };
   video.load();
@@ -91,24 +99,31 @@ function renderVideoList() {
   const list = $('videoList');
   list.hidden = !files.length;
   drop.classList.toggle('compact', files.length > 0);
-  // 保留已有的 video 元素（重新创建会丢失已加载的数据）
-  list.replaceChildren(...files.map((f, i) => {
-    const li = document.createElement('li');
-    li.append(f.video);
-    const info = document.createElement('div');
+  // 每个视频的行只建一次，之后只更新文字：反复把 video 元素移出页面再放回，Safari 可能中断加载
+  for (const li of [...list.children]) if (!files.some((f) => f.li === li)) li.remove();
+  files.forEach((f, i) => {
+    if (!f.li) {
+      f.li = document.createElement('li');
+      f.info = document.createElement('div');
+      f.li.append(f.video, f.info);
+    }
+    if (list.children[i] !== f.li) list.insertBefore(f.li, list.children[i] || null);
     const long = f.duration > SINGLE_MAX;
-    info.innerHTML = `<b>视频 ${i + 1}</b> <span class="muted small">${f.duration ? `${f.duration.toFixed(1)} 秒` : '读取中…'}</span>
-      <div class="muted small">${long ? `长视频：自动找出每一杆${f.duration > MAX_LEN ? `（只分析前 ${MAX_LEN / 60} 分钟）` : ''}` : '一杆'}</div>
+    const state = f.error ? '<span class="bad-text">这个视频读不出来</span>'
+      : f.duration ? `${f.duration.toFixed(1)} 秒` : '读取中…';
+    const note = f.error ? '可以移除后重新选择，或换一段视频'
+      : long ? `长视频：自动找出每一杆${f.duration > MAX_LEN ? `（只分析前 ${MAX_LEN / 60} 分钟）` : ''}` : '一杆';
+    f.info.innerHTML = `<b>视频 ${i + 1}</b> <span class="muted small">${state}</span>
+      <div class="muted small">${note}</div>
       <button type="button" class="link-btn" data-remove="${f.id}">移除</button>`;
-    li.append(info);
-    return li;
-  }));
+  });
   updateAnalyzeButton();
 }
 
 function updateAnalyzeButton() {
-  $('analyze').disabled = files.length === 0;
-  $('analyze').textContent = files.length > 1 ? `开始分析（${files.length} 个视频）` : '开始分析';
+  const ok = files.filter((f) => !f.error).length;
+  $('analyze').disabled = ok === 0;
+  $('analyze').textContent = ok > 1 ? `开始分析（${ok} 个视频）` : '开始分析';
 }
 
 // 结果页的「分析新视频」：清掉旧结果，回到上传区
@@ -232,7 +247,7 @@ function groupByView(swings) {
 
 $('analyze').addEventListener('click', async () => {
   // 必须在点击事件里同步调用（iPhone 要求播放由用户手势触发）
-  const todo = [...files];
+  const todo = files.filter((f) => !f.error);
   const primed = todo.map((f) => primeVideo(f.video));
   hideError();
   $('analyze').disabled = true;

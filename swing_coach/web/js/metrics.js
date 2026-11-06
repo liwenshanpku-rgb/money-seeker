@@ -95,7 +95,7 @@ export function rotationSeries(frames, P, { view, dir, handed, kind }) {
 export { transitionIndex };
 
 // 指标计算所需的上下文
-export function makeContext(frames, P, { view, dir, handed, club, impact = null }) {
+export function makeContext(frames, P, { view, dir, handed, club, impact = null, lagSec = 0.033 }) {
   const B = (pos) => body(frames[P[pos]].lm, handed);
   const b1 = B('P1');
   const stance = Math.abs(b1.leadAnkle.x - b1.trailAnkle.x) || 1e-6;
@@ -132,14 +132,15 @@ export function makeContext(frames, P, { view, dir, handed, club, impact = null 
     transition: () => transitionIndex(frames, P, handed),
     impact,
     // 击球帧（按球被击出确定）时，双手与球的连线偏离竖直的角度，双手在球前（朝目标）为正。
-    // 击球时杆头就在球的位置，这近似杆身前倾。双手位置按速度补偿姿态模型约 0.033 秒的延迟
+    // 击球时杆头就在球的位置，这近似杆身前倾。双手位置按速度补偿姿态模型的延迟（约一帧，lagSec；
+    // 慢动作换算成真实时间后，一帧对应的真实时间更短，由调用方传入）
     shaftLean: () => {
       if (!impact) return NaN;
       const i = impact.frame, n = frames.length;
       const hand = (j) => body(frames[Math.max(0, Math.min(n - 1, j))].lm, handed).hands;
       const a = hand(i - 1), c = hand(i + 1), h0 = hand(i);
       const dt = (frames[Math.min(n - 1, i + 1)].t - frames[Math.max(0, i - 1)].t) || 1;
-      const hx = h0.x + ((c.x - a.x) / dt) * 0.033, hy = h0.y + ((c.y - a.y) / dt) * 0.033;
+      const hx = h0.x + ((c.x - a.x) / dt) * lagSec, hy = h0.y + ((c.y - a.y) / dt) * lagSec;
       return deg(Math.atan2((hx - impact.ball.x) * dir, impact.ball.y - hy));
     },
     // 侧面：同一高度下，下杆时双手比上杆时更靠近球（正，偏外）还是更靠近身体（负，偏内），躯干长度为单位。

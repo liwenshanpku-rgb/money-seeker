@@ -179,7 +179,9 @@ const isSlowMo = (a) => !a.pro && a.frames[a.P.P7].t - a.frames[a.P.P4].t > 0.8;
 
 function score(a) {
   const impact = a.impact ? { frame: a.impact.frame, ball: a.impact.ballLm } : null;
-  const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club, impact });
+  // 姿态模型的延迟约一帧（视频时间 0.033 秒）；慢动作换算成真实时间后要除以放慢倍数
+  const lagSec = 0.033 / (a.settings.slow || 1);
+  const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club, impact, lagSec });
   a.slowMo = isSlowMo(a);
   a.results = evaluate(ctx).map((r) => ({ ...r, view: a.view }));
   a.oblique = a.view === 'fo' && ctx.oblique();

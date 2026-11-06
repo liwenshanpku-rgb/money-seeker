@@ -243,13 +243,22 @@ export function findSwings(rawFrames, { handed = 'right', before = 2.5, after = 
     }
     return false;
   };
+  // 击球时双手在腰部或更低：峰值前后 0.2 秒内要有这样的帧（顶点处杆的晃动、收杆后转身时双手都在高处）
+  const waist = (j) => B[j].hands.y > (B[j].shoulderMid.y + B[j].hipMid.y) / 2;
+  const nearLow = (i) => {
+    for (let j = i; j >= 0 && t[i] - t[j] <= 0.2; j--) if (waist(j)) return true;
+    for (let j = i; j < n && t[j] - t[i] <= 0.2; j++) if (waist(j)) return true;
+    return false;
+  };
+  // 相近的候选里保留「快且双手低」的那个
+  const score = (i) => speed[i] * (waist(i) ? 1 : 0.6);
   const peaks = [];
   for (let i = 1; i < n - 1; i++) {
     // 收杆后放下球杆、走动等动作不满足「之前举过肩、之后又举过肩、速度够快」
     if (speed[i] < 0.35 * vmax || speed[i] < speed[i - 1] || speed[i] < speed[i + 1]) continue;
-    if (!raised(i) || !finished(i)) continue;
+    if (!raised(i) || !finished(i) || !nearLow(i)) continue;
     const last = peaks[peaks.length - 1];
-    if (last && t[i] - t[last] < 2.5) { if (speed[i] > speed[last]) peaks[peaks.length - 1] = i; continue; }
+    if (last && t[i] - t[last] < 2.5) { if (score(i) > score(last)) peaks[peaks.length - 1] = i; continue; }
     peaks.push(i);
   }
   // 窗口起点：从击球往回找，越过上杆顶点后，第一个「双手低于髋部且基本静止」的帧就是准备姿势，再往前留 0.5 秒。

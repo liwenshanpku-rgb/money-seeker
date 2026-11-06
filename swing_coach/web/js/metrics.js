@@ -95,7 +95,7 @@ export function rotationSeries(frames, P, { view, dir, handed, kind }) {
 export { transitionIndex };
 
 // 指标计算所需的上下文
-export function makeContext(frames, P, { view, dir, handed, club }) {
+export function makeContext(frames, P, { view, dir, handed, club, impact = null }) {
   const B = (pos) => body(frames[P[pos]].lm, handed);
   const b1 = B('P1');
   const stance = Math.abs(b1.leadAnkle.x - b1.trailAnkle.x) || 1e-6;
@@ -130,6 +130,18 @@ export function makeContext(frames, P, { view, dir, handed, club }) {
       return best;
     },
     transition: () => transitionIndex(frames, P, handed),
+    impact,
+    // 击球帧（按球被击出确定）时，双手与球的连线偏离竖直的角度，双手在球前（朝目标）为正。
+    // 击球时杆头就在球的位置，这近似杆身前倾。双手位置按速度补偿姿态模型约 0.033 秒的延迟
+    shaftLean: () => {
+      if (!impact) return NaN;
+      const i = impact.frame, n = frames.length;
+      const hand = (j) => body(frames[Math.max(0, Math.min(n - 1, j))].lm, handed).hands;
+      const a = hand(i - 1), c = hand(i + 1), h0 = hand(i);
+      const dt = (frames[Math.min(n - 1, i + 1)].t - frames[Math.max(0, i - 1)].t) || 1;
+      const hx = h0.x + ((c.x - a.x) / dt) * 0.033, hy = h0.y + ((c.y - a.y) / dt) * 0.033;
+      return deg(Math.atan2((hx - impact.ball.x) * dir, impact.ball.y - hy));
+    },
     // 侧面：同一高度下，下杆时双手比上杆时更靠近球（正，偏外）还是更靠近身体（负，偏内），躯干长度为单位。
     // 取双手在上杆 50%–75% 高度之间几个高度的平均；更低处下杆双手本来就会向球伸出，不比较。
     downPath: () => {
@@ -162,6 +174,7 @@ export const TPI = {
   over_the_top: { name: '由外向内（Over the Top）', screen: '上下身分离能力差（髋先动、肩跟不住），或胸椎转动不足。自测：准备姿势双手抱胸，肩膀不动只转髋，做不到说明上下身分离受限。' },
   flat_shoulder: { name: '肩部平转（Flat Shoulder Plane）', screen: '常和胸椎灵活性不足、准备时前倾太少有关。自测：同上的坐姿转身测试；背靠墙站立，双臂贴墙上举，手臂贴不到墙说明上背伸展受限。' },
   chicken_wing: { name: '鸡翅膀（Chicken Winging）', screen: '常和前肩向外转动不足、或下杆身体停转有关。自测：仰卧，前臂外展 90°、肘弯 90°，前臂向后（地面方向）转，接近不了地面说明肩外旋受限。' },
+  scooping: { name: '捞球 / 提前释放（Scooping / Early Release）', screen: '常和前侧手腕向下（掌侧）屈的灵活性不足、前臂力量不足，或下杆身体停转、手臂只能自己甩杆有关。自测：前臂平放在桌上、手伸出桌沿，手腕向下屈，屈不到明显角度或两侧差距大，说明手腕灵活性受限；同时检查上面的髋部、胸椎转动测试。' },
   late_buckle: { name: '前膝后期弯曲（Late Buckle）', screen: '前腿蹬地力量或髋内旋不足。自测：前腿单腿下蹲 5 次，膝盖内扣或晃动说明前腿支撑不足。' },
 };
 // 哪项检查的哪一侧对应 TPI 的哪种问题
@@ -170,7 +183,8 @@ const TPI_MAP = {
   fo_p4_tilt: { low: 'reverse_spine' },
   fo_p5_shift: { low: 'hanging_back', high: 'slide' }, fo_p6_shift: { low: 'hanging_back', high: 'slide' }, fo_p7_shift: { low: 'hanging_back', high: 'slide' },
   fo_p7_tilt: { high: 'hanging_back' },
-  fo_p8_leadelbow: { low: 'chicken_wing' }, fo_p8_leadknee: { low: 'late_buckle' },
+  fo_p8_leadelbow: { low: 'chicken_wing' },
+  fo_p7_shaftlean: { low: 'scooping' }, fo_p8_leadknee: { low: 'late_buckle' },
   dtl_p4_bend: { low: 'loss_of_posture', high: 'loss_of_posture' }, dtl_p7_bend: { low: 'loss_of_posture', high: 'loss_of_posture' },
   dtl_p4_head: { low: 'loss_of_posture', high: 'loss_of_posture' }, dtl_p7_head: { low: 'loss_of_posture', high: 'loss_of_posture' },
   dtl_p4_hips: { high: 'early_extension' }, dtl_p6_hips: { high: 'early_extension' }, dtl_p7_hips: { high: 'early_extension' },
@@ -385,6 +399,16 @@ export const METRICS = [
     about: '击球时双手相对准备位置向目标侧移动了多少。只作参考：击球前后双手移动极快，差一帧数值就差很多，也看不出双手是否在前腿前方（判断捞球需要准确的击球帧）。',
     low: { issue: '击球时手落后（翻腕/挑球）', why: '过早释放手腕，杆身后倾，失去压缩、距离和方向都不稳。', fix: '下杆保持手腕角度更久，让身体转动带手通过击球区，击球时双手在前大腿前方。', drill: '「推杆袋」练习：杆头顶住一个装满毛巾的袋子，保持手在杆头前方推动它。' },
     high: { issue: '手领先过多', why: '杆面容易打开、出右，或杆身前倾过大打低。', fix: '让杆头自然释放，击球时双手在前大腿内侧即可。', drill: '半挥杆练习，感受杆头与双手同时到达击球位置。' },
+  },
+  {
+    id: 'fo_p7_shaftlean', view: 'fo', pos: 'P7', name: '击球时杆身前倾（手相对球）', unit: '°', digits: 0,
+    needsImpact: true,
+    points: ['leadWrist', 'trailWrist'],
+    value: (c) => c.shaftLean(),
+    range: { iron: [5, 22], driver: [-2, 16] },
+    about: '击球瞬间（按画面里球被击出的那一帧）双手相对球的位置：双手与球的连线偏离竖直的角度，双手在球前（朝目标）为正。击球时杆头就在球的位置，所以这近似杆身前倾。职业球员铁杆约 +13° ~ +19°，一号木约 +5° ~ +12°。击球帧可能差 ±1 帧，60fps 时数值约有 ±5° 误差。',
+    low: { issue: '击球时杆身后仰（捞球）', why: '双手落后、杆头先到球，用手腕把球「捞」起来：出球偏高、距离不稳，常打厚或打薄，铁杆失去压缩。', fix: '下杆保持手腕角度，靠身体转动把双手带到前腿前方再击球；击球时感觉双手在球的前面。', drill: '在球前方约一个杆头远处放一个球座，击球后杆头要扫到它（击球低点在球前）；或做「推袋子」练习：杆头顶住装毛巾的袋子，保持双手在前推着走。' },
+    high: { issue: '杆身前倾过多', why: '双手过度领先，杆面容易打开，出球偏低偏右。', fix: '让杆头自然释放，击球时双手在前大腿内侧即可。', drill: '半挥杆练习，体会双手和杆头差不多同时到达球。' },
   },
   {
     id: 'fo_p7_tilt', view: 'fo', pos: 'P7', name: '击球时脊柱侧倾', unit: '°', digits: 0,
@@ -677,6 +701,7 @@ export function evaluate(ctx) {
     let g = grade(value, range);
     if (visibility < 0.5 && g.status !== 'na') g = { status: 'na', severity: 0, lowVis: true };
     if (m.rotation && ctx.oblique()) g = { status: 'na', severity: 0, oblique: true };
+    if (m.needsImpact && !ctx.impact) g = { status: 'na', severity: 0, noImpact: true };
     // 单机位估算误差大的指标只作参考：不按绝对区间打分（选了职业球员时改为和他对比，见 compareToPro）
     if (m.ref && g.status !== 'na') g = { status: 'ref', severity: 0 };
     const advice = g.side ? m[g.side] : null;

@@ -135,14 +135,18 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
     return dist(a, b) / (dt * (Math.min(n - 1, i + 1) - Math.max(0, i - 1)));
   });
   const edge = Math.min(sec(0.05), Math.floor(n / 10));
-  const iFast = argBest(edge, n - 1 - edge, (i) => speed[i]);
-  const vmax = speed[iFast];
+  // 击球：手速快且双手处在低位。慢速挥杆时送杆阶段手也很快，但那时双手已经抬高，按高度加权避免把送杆当成击球
+  let yTop = Infinity, yLow = -Infinity;
+  for (const h of hands) { yTop = Math.min(yTop, h.y); yLow = Math.max(yLow, h.y); }
+  const lowness = (i) => (hands[i].y - yTop) / ((yLow - yTop) || 1);
+  const iFast = argBest(edge, n - 1 - edge, (i) => speed[i] * (0.25 + 0.75 * lowness(i) ** 2));
+  const vmax = Math.max(...speed.slice(edge, n - edge));
   if (!(vmax > 0)) throw new Error('没有检测到挥杆动作');
 
   // P7：手速峰值 ±0.1 秒内双手最低（y 最大）的帧
   const i7 = argBest(Math.max(0, iFast - sec(0.1)), Math.min(n - 1, iFast + sec(0.1)), (i) => hands[i].y);
-  // P4：击球前 2.5 秒内双手最高
-  const i4 = argBest(Math.max(0, i7 - sec(2.5)), Math.max(0, i7 - 2), (i) => -hands[i].y);
+  // P4：击球前 3.5 秒内双手最高（顶点停顿较久的慢速挥杆，顶点离击球可能超过 2 秒）
+  const i4 = argBest(Math.max(0, i7 - sec(3.5)), Math.max(0, i7 - 2), (i) => -hands[i].y);
   const swingH = hands[i7].y - hands[i4].y;
   // 侧面视角里起杆初段双手主要沿镜头纵深移动，画面上很慢，所以静止阈值更低
   const v0 = view || detectView(frames[Math.max(0, i4 - sec(1))].lm, handed);
@@ -248,9 +252,20 @@ export function findSwings(rawFrames, { handed = 'right', before = 2.5, after = 
     if (last && t[i] - t[last] < 2.5) { if (speed[i] > speed[last]) peaks[peaks.length - 1] = i; continue; }
     peaks.push(i);
   }
+  // 窗口起点：从击球往回找，越过上杆顶点后，第一个「双手低于髋部且基本静止」的帧就是准备姿势，再往前留 0.5 秒。
+  // 上杆慢、顶点停顿久的挥杆，准备姿势可能在击球前 3 秒以上；找不到时退回固定的 before 秒
+  const addressStart = (i) => {
+    let j = i;
+    while (j > 0 && t[i] - t[j] <= 6 && !up(j)) j--;
+    while (j > 0 && t[i] - t[j] <= 6) {
+      if (!up(j) && B[j].hands.y > B[j].hipMid.y && speed[j] < 0.1 * vmax) return t[j] - 0.5;
+      j--;
+    }
+    return t[i] - before;
+  };
   return peaks.map((i, k) => ({
     peak: t[i],
-    start: Math.max(t[0], t[i] - before, k > 0 ? t[peaks[k - 1]] + 1.2 : -Infinity),
+    start: Math.max(t[0], Math.min(t[i] - before, addressStart(i)), k > 0 ? t[peaks[k - 1]] + 1.2 : -Infinity),
     end: Math.min(t[n - 1], t[i] + after, k < peaks.length - 1 ? t[peaks[k + 1]] - 2 : Infinity),
   }));
 }

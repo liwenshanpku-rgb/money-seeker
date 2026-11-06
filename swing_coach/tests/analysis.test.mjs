@@ -254,3 +254,18 @@ test('多杆综合：取中位数并重新评分', () => {
   assert.equal(agg.length, runs[0].length);
   assert.notEqual(representativeIndex(runs, agg), 2);
 });
+
+test('慢速挥杆：准备很久、上杆很慢，窗口仍包含准备姿势，击球识别正确', () => {
+  // 准备 6 秒；上杆 2.2 秒到顶点；下杆 0.5 秒
+  const timing = { P1: 0, P2: 0.8, P3: 1.5, P4: 2.2, P5: 2.45, P6: 2.58, P7: 2.7, P8: 2.82, P9: 3.0, P10: 3.6 };
+  const s = syntheticSwing({ view: 'fo', fps: 12, lead: 6, tail: 2, timing, noise: 0.002 });
+  const [w] = findSwings(s.frames, {});
+  assert.ok(w, '应找到一杆');
+  assert.ok(w.start <= 6 - 0.2, `窗口起点 ${w.start} 应在起杆（6 秒）之前`);
+  const fine = syntheticSwing({ view: 'fo', fps: 30, lead: 6, tail: 2, timing, noise: 0.002 });
+  const sub = fine.frames.filter((f) => f.t >= w.start && f.t <= w.end);
+  const det = detectPhases(sub, {});
+  assert.ok(Math.abs(sub[det.P.P7].t - (6 + timing.P7)) < 0.1, `击球 ${sub[det.P.P7].t}`);
+  assert.ok(Math.abs(sub[det.P.P4].t - (6 + timing.P4)) < 0.2, `顶点 ${sub[det.P.P4].t}`);
+  assert.ok(sub[det.P.P1].t < 6 + 0.3, `准备 ${sub[det.P.P1].t}`);
+});

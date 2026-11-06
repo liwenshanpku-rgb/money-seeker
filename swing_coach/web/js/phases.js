@@ -122,6 +122,28 @@ function crossing(feat, lo, hi, th, rising) {
   return argBest(lo, hi, (i) => -Math.abs(feat[i] - th));
 }
 
+// 下杆真正开始的帧。通常取「双手从最高点下降超过挥杆高度 6%」的那一帧：很多人双手到顶后杆头还在继续上行，
+// 按双手最高点算会把这段时间算进下杆，节奏比偏低。
+// 但有人在顶点停顿、双手缓慢下沉（一秒左右），6% 很早就超过了；这时改用速度判断——击球前双手向下的速度
+// 最后一次低于峰值 25% 的那一帧，两者相差超过 0.3 秒时以速度判断为准。
+export function transitionIndex(frames, P, handed) {
+  const y = (i) => body(frames[i].lm, handed).hands.y;
+  const n = frames.length;
+  const top = y(P.P4), h = y(P.P7) - top;
+  let iDrop = P.P4;
+  while (iDrop < P.P7 - 1 && y(iDrop + 1) - top < 0.06 * h) iDrop++;
+  const v = (i) => {
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+    return (y(b) - y(a)) / ((frames[b].t - frames[a].t) || 1);
+  };
+  let vmax = 0, iPeak = P.P4;
+  for (let i = P.P4; i <= P.P7; i++) if (v(i) > vmax) { vmax = v(i); iPeak = i; }
+  // 从下落最快处往回找（击球那一帧双手在最低点、速度接近 0，不能从那里开始找）
+  let iSpeed = iPeak;
+  while (iSpeed > P.P4 && v(iSpeed) >= 0.25 * vmax) iSpeed--;
+  return frames[iSpeed].t - frames[iDrop].t > 0.3 ? iSpeed : iDrop;
+}
+
 export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron', smoothed } = {}) {
   const frames = smoothed || smoothFrames(rawFrames);
   const n = frames.length;
@@ -135,14 +157,18 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
     return dist(a, b) / (dt * (Math.min(n - 1, i + 1) - Math.max(0, i - 1)));
   });
   const edge = Math.min(sec(0.05), Math.floor(n / 10));
-  const iFast = argBest(edge, n - 1 - edge, (i) => speed[i]);
-  const vmax = speed[iFast];
+  // 击球：手速快且双手处在低位。慢速挥杆时送杆阶段手也很快，但那时双手已经抬高，按高度加权避免把送杆当成击球
+  let yTop = Infinity, yLow = -Infinity;
+  for (const h of hands) { yTop = Math.min(yTop, h.y); yLow = Math.max(yLow, h.y); }
+  const lowness = (i) => (hands[i].y - yTop) / ((yLow - yTop) || 1);
+  const iFast = argBest(edge, n - 1 - edge, (i) => speed[i] * (0.25 + 0.75 * lowness(i) ** 2));
+  const vmax = Math.max(...speed.slice(edge, n - edge));
   if (!(vmax > 0)) throw new Error('没有检测到挥杆动作');
 
   // P7：手速峰值 ±0.1 秒内双手最低（y 最大）的帧
   const i7 = argBest(Math.max(0, iFast - sec(0.1)), Math.min(n - 1, iFast + sec(0.1)), (i) => hands[i].y);
-  // P4：击球前 2.5 秒内双手最高
-  const i4 = argBest(Math.max(0, i7 - sec(2.5)), Math.max(0, i7 - 2), (i) => -hands[i].y);
+  // P4：击球前 3.5 秒内双手最高（顶点停顿较久的慢速挥杆，顶点离击球可能超过 2 秒）
+  const i4 = argBest(Math.max(0, i7 - sec(3.5)), Math.max(0, i7 - 2), (i) => -hands[i].y);
   const swingH = hands[i7].y - hands[i4].y;
   // 侧面视角里起杆初段双手主要沿镜头纵深移动，画面上很慢，所以静止阈值更低
   const v0 = view || detectView(frames[Math.max(0, i4 - sec(1))].lm, handed);
@@ -192,7 +218,9 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
   const P = { P1: i1, P4: i4, P7: i7, P10: i10 };
   P.P2 = crossing(feat, i1, i4, th.P2, true);
   P.P3 = crossing(feat, P.P2, i4, th.P3, true);
-  P.P5 = crossing(feat, i4, i7, th.P5, false);
+  // P5、P6 在真正开始下杆之后（顶点停顿、缓慢下沉期间不算）
+  const iT = transitionIndex(frames, { P4: i4, P7: i7 }, handed);
+  P.P5 = crossing(feat, Math.max(i4, iT), i7, th.P5, false);
   P.P6 = crossing(feat, P.P5, i7, th.P6, false);
   if (v === 'fo') {
     P.P8 = crossing(feat, i7, i10, th.P8, false);
@@ -239,18 +267,38 @@ export function findSwings(rawFrames, { handed = 'right', before = 2.5, after = 
     }
     return false;
   };
+  // 击球时双手在腰部或更低：峰值前后 0.2 秒内要有这样的帧（顶点处杆的晃动、收杆后转身时双手都在高处）
+  const waist = (j) => B[j].hands.y > (B[j].shoulderMid.y + B[j].hipMid.y) / 2;
+  const nearLow = (i) => {
+    for (let j = i; j >= 0 && t[i] - t[j] <= 0.2; j--) if (waist(j)) return true;
+    for (let j = i; j < n && t[j] - t[i] <= 0.2; j++) if (waist(j)) return true;
+    return false;
+  };
+  // 相近的候选里保留「快且双手低」的那个
+  const score = (i) => speed[i] * (waist(i) ? 1 : 0.6);
   const peaks = [];
   for (let i = 1; i < n - 1; i++) {
     // 收杆后放下球杆、走动等动作不满足「之前举过肩、之后又举过肩、速度够快」
     if (speed[i] < 0.35 * vmax || speed[i] < speed[i - 1] || speed[i] < speed[i + 1]) continue;
-    if (!raised(i) || !finished(i)) continue;
+    if (!raised(i) || !finished(i) || !nearLow(i)) continue;
     const last = peaks[peaks.length - 1];
-    if (last && t[i] - t[last] < 2.5) { if (speed[i] > speed[last]) peaks[peaks.length - 1] = i; continue; }
+    if (last && t[i] - t[last] < 2.5) { if (score(i) > score(last)) peaks[peaks.length - 1] = i; continue; }
     peaks.push(i);
   }
+  // 窗口起点：从击球往回找，越过上杆顶点后，第一个「双手低于髋部且基本静止」的帧就是准备姿势，再往前留 0.5 秒。
+  // 上杆慢、顶点停顿久的挥杆，准备姿势可能在击球前 3 秒以上；找不到时退回固定的 before 秒
+  const addressStart = (i) => {
+    let j = i;
+    while (j > 0 && t[i] - t[j] <= 6 && !up(j)) j--;
+    while (j > 0 && t[i] - t[j] <= 6) {
+      if (!up(j) && B[j].hands.y > B[j].hipMid.y && speed[j] < 0.1 * vmax) return t[j] - 0.5;
+      j--;
+    }
+    return t[i] - before;
+  };
   return peaks.map((i, k) => ({
     peak: t[i],
-    start: Math.max(t[0], t[i] - before, k > 0 ? t[peaks[k - 1]] + 1.2 : -Infinity),
+    start: Math.max(t[0], Math.min(t[i] - before, addressStart(i)), k > 0 ? t[peaks[k - 1]] + 1.2 : -Infinity),
     end: Math.min(t[n - 1], t[i] + after, k < peaks.length - 1 ? t[peaks[k + 1]] - 2 : Infinity),
   }));
 }

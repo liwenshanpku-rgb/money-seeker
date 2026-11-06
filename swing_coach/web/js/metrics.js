@@ -4,6 +4,7 @@
 // P-system 检查点），按 2D 视频可测的方式换算。2D 视频有透视误差，数值宜看趋势，不宜当作精确测量。
 
 import { body, angleAt, tiltFromVertical, clamp, deg, meanVisibility, sides } from './geometry.js';
+import { transitionIndex } from './phases.js';
 
 const acosDeg = (r) => deg(Math.acos(clamp(r, 0, 1)));
 
@@ -90,15 +91,8 @@ export function rotationSeries(frames, P, { view, dir, handed, kind }) {
   return out;
 }
 
-// 下杆真正开始的帧：双手从最高点下降超过挥杆高度的 6%。很多人双手到顶后杆头还在继续上行
-//（手腕继续屈），按双手最高点算会把这段时间算进下杆，节奏比偏低。
-export function transitionIndex(frames, P, handed) {
-  const y = (i) => body(frames[i].lm, handed).hands.y;
-  const top = y(P.P4), h = y(P.P7) - top;
-  let i = P.P4;
-  while (i < P.P7 - 1 && y(i + 1) - top < 0.06 * h) i++;
-  return i;
-}
+// 下杆真正开始的帧（定义见 phases.js），节奏和上杆 / 下杆用时都按它算
+export { transitionIndex };
 
 // 指标计算所需的上下文
 export function makeContext(frames, P, { view, dir, handed, club }) {

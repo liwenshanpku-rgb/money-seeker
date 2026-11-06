@@ -153,8 +153,19 @@ function analyzeFrames(rawFrames, s, extra = {}) {
     ...extra, settings: s, raw: rawFrames, frames: smoothed, speed: det.speed,
     view: det.view, dir: det.dir, autoP: { ...det.P }, P: { ...det.P },
   };
+  a.phaseWarning = phaseSanity(a);
   score(a);
   return a;
+}
+
+// P 位置明显不合理时提醒（挥杆识别错了，结果会全部跑偏）
+function phaseSanity(a) {
+  const t = (p) => a.frames[a.P[p]].t;
+  const same = ['P2', 'P3', 'P4', 'P5', 'P6', 'P7'].some((p, i, arr) => i > 0 && a.P[p] === a.P[arr[i - 1]]);
+  if (same || t('P4') - t('P1') > 3.5 || t('P7') - t('P4') > 2.5 || a.P.P1 === 0 && a.P.P2 <= 2) {
+    return `${VIEW_SHORT[a.view] || ''}视频里这一杆的关键位置可能识别有误（例如两个位置落在同一帧、上杆或下杆用时不合理）。请对照下面的画面检查，可以在「P 位置校正」里手动调整。`;
+  }
+  return null;
 }
 
 function score(a) {
@@ -336,7 +347,7 @@ async function renderAll({ scroll = true } = {}) {
     a.crop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect);
     a.pathCrop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect, { ratio: 1, pad: 0.1 });
   }
-  const warnings = list.map((a) => a.viewWarning).filter(Boolean);
+  const warnings = list.map((a) => a.viewWarning || a.phaseWarning).filter(Boolean);
   if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
   if (warnings.length) showError(warnings.join(' '));
   renderSummary();

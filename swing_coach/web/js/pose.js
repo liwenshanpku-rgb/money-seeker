@@ -22,6 +22,7 @@ async function loadVision() {
 }
 
 const cache = {};
+const lastTs = {}; // 每个识别模型最后用过的时间戳
 const SNAP_HEIGHT = 720;
 
 async function landmarker(model) {
@@ -168,12 +169,23 @@ export async function extractPoses(video, { fps = 30, start = 0, end, model = 'f
   // （iPhone 上事后再跳转视频，常常画面还没解码就被截图，背景会停在旧画面）
   const k = Math.min(1, SNAP_HEIGHT / video.videoHeight);
   const grab = snapshots ? frameGrabber(Math.round(video.videoWidth * k), Math.round(video.videoHeight * k)) : async () => null;
-  let ts = (performance.now() | 0) + 1;
+  // detectForVideo 要求同一个识别器的时间戳在所有调用之间严格递增（不只是一次分析之内）。
+  // 帧间隔按视频时间累加，可能跑到系统时钟前面，所以从上一次用过的时间戳之后接着走。
+  let ts = Math.max(performance.now() | 0, lastTs[model] || 0) + 1;
   for (let i = 0; i <= total; i++) {
     const t = Math.min(stop, start + i / fps);
     await seek(video, t);
-    ts += Math.round(1000 / fps); // detectForVideo 要求时间戳严格递增
-    const res = pl.detectForVideo(video, ts);
+    ts += Math.round(1000 / fps);
+    lastTs[model] = ts;
+    let res;
+    try {
+      res = pl.detectForVideo(video, ts);
+    } catch (err) {
+      // 识别器出错后内部状态不可用：丢掉，下次重新创建
+      console.error(err);
+      delete cache[model];
+      throw new Error('姿态识别出错，请再点一次「开始分析」；仍然出错的话请刷新页面');
+    }
     const raw = res.landmarks?.[0];
     const img = await grab(video);
     const world = res.worldLandmarks?.[0];

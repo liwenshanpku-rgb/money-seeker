@@ -28,7 +28,7 @@
       </label>
       <input type="file" id="file-all" accept="video/*" multiple hidden>
       <ul class="video-list" id="videoList" hidden></ul>
-      <p class="muted small slot-tip">可以传一段或多段视频，也可以是连续打了好几杆的长视频（每段最长 3 分钟），会自动找出每一杆，按正面、侧面分别综合。正面 + 侧面都有时结果最完整，只有一个角度也可以。全身入镜，最好 60fps 以上。慢动作（120 帧）画面更清楚，分析时在「采样帧率」里选「120 帧慢动作」。</p>
+      <p class="muted small slot-tip">可以传一段或多段视频，也可以是连续打了好几杆的长视频（每段最长 3 分钟），会自动找出每一杆，按正面、侧面分别综合。正面 + 侧面都有时结果最完整，只有一个角度也可以。全身入镜，最好 60fps 以上。慢动作（120 / 240 帧）画面更清楚，会自动识别并换算成真实时间，也可以在「采样帧率」里手动选择。</p>
 
       <div class="settings">
         <label>惯用手
@@ -38,7 +38,7 @@
           <select id="club"><option value="iron">铁杆</option><option value="driver">一号木</option></select>
         </label>
         <label>采样帧率
-          <select id="fps"><option value="30">30 fps（较快）</option><option value="60" selected>60 fps（节奏更准）</option><option value="120">120 帧慢动作（时间按 4 倍换算）</option></select>
+          <select id="fps"><option value="30">30 fps（较快）</option><option value="60" selected>60 fps（节奏更准）</option><option value="120">120 帧慢动作（时间按 4 倍换算）</option><option value="240">240 帧慢动作（时间按 8 倍换算）</option></select>
         </label>
         <label>识别模型
           <select id="model"><option value="heavy" selected>高精度（推荐）</option><option value="full">标准（更快）</option></select>

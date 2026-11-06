@@ -29,13 +29,16 @@ let fileSeq = 0;
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
 if (isPhone) $('fps').value = '30';
 
+// 慢动作选项：iPhone 慢动作导出后都是 30fps，120 帧放慢 4 倍、240 帧放慢 8 倍
+const SLOW_OPTIONS = { 120: 4, 240: 8 };
+
 function settings() {
   return {
     handed: $('handed').value,
     club: $('club').value,
     // 「120 帧慢动作」：iPhone 导出的慢动作是放慢 4 倍的 30fps 视频，逐帧采样，时间除以 4 换算回真实时间
-    fps: $('fps').value === '120' ? 30 : Number($('fps').value),
-    slow: $('fps').value === '120' ? 4 : 1,
+    fps: SLOW_OPTIONS[$('fps').value] ? 30 : Number($('fps').value),
+    slow: SLOW_OPTIONS[$('fps').value] || 1,
     model: $('model').value,
   };
 }
@@ -173,9 +176,11 @@ function phaseSanity(a) {
   return null;
 }
 
-// 看起来是没换算的慢动作：真人下杆（顶点到击球）不超过约 0.5 秒，超过 0.8 秒只能是放慢了。
+// 看起来是没换算的慢动作：真人下杆不超过约 0.5 秒，超过 0.8 秒只能是放慢了。
 // 节奏是比例，均匀放慢不影响；只有用时需要在「采样帧率」里选慢动作换算
-const isSlowMo = (a) => !a.pro && a.frames[a.P.P7].t - a.frames[a.P.P4].t > 0.8;
+// 从下杆开始（双手下降 6%）算，顶点真正的停顿不计入，避免把在顶点停一下的真人挥杆当成慢动作
+const downswingTime = (a) => a.frames[a.P.P7].t - a.frames[transitionIndex(a.frames, a.P, a.settings.handed)].t;
+const isSlowMo = (a) => !a.pro && downswingTime(a) > 0.8;
 
 function score(a) {
   const impact = a.impact ? { frame: a.impact.frame, ball: a.impact.ballLm } : null;
@@ -222,7 +227,15 @@ async function analyzeVideo(video, s, label = '') {
   const { frames: filled, missingRatio } = fillMissing(frames);
   if (missingRatio > 0.4) throw new Error(`${label}超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足`);
   toRealTime(filled, s);
-  const a = analyzeFrames(filled, s, { aspect, source: frameSource(filled) });
+  let a = analyzeFrames(filled, s, { aspect, source: frameSource(filled) });
+  // 没选慢动作、但看起来是慢动作（顶点到击球在视频里超过 0.8 秒）：按下杆用时估计放慢倍数，换算后重新分析。
+  // 真人下杆约 0.25–0.45 秒，视频里 2.4 秒以内按 4 倍（120 帧），更长按 8 倍（240 帧）
+  if ((s.slow || 1) === 1 && isSlowMo(a)) {
+    const factor = downswingTime(a) < 2.4 ? 4 : 8;
+    const s2 = { ...s, slow: factor, autoSlow: true };
+    toRealTime(filled, s2);
+    a = analyzeFrames(filled, s2, { aspect, source: frameSource(filled) });
+  }
   a.missingRatio = missingRatio;
   setProgress(1, `${label}确定击球帧…`);
   await locateImpact(a, filled);
@@ -405,6 +418,8 @@ async function renderAll({ scroll = true } = {}) {
     a.pathCrop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect, { ratio: 1, pad: 0.1 });
   }
   const warnings = list.map((a) => a.viewWarning || a.phaseWarning).filter(Boolean);
+  const auto = list.find((a) => a.settings.autoSlow);
+  if (auto) warnings.push(`已自动识别为慢动作视频，按约 ${auto.settings.slow} 倍换算成真实时间（iPhone 慢动作导出后都是 30 帧：120 帧放慢约 4 倍、240 帧约 8 倍）。如果倍数不对，请在「采样帧率」里手动选择后重新分析。`);
   if (list.some((a) => a.slowMo)) warnings.push('看起来是慢动作视频：节奏比例照常计算；上杆 / 下杆用时是放慢后的视频时间。如果是 120 帧慢动作，在「采样帧率」里选「120 帧慢动作」再分析，就会换算成真实时间。');
   if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
   if (warnings.length) showError(warnings.join(' '));

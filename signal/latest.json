@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-05T07:26:49+00:00",
-  "as_of_close_utc": "2026-11-04",
-  "price": 80440.8,
+  "generated_at": "2026-11-06T07:26:07+00:00",
+  "as_of_close_utc": "2026-11-05",
+  "price": 75979.9,
   "price_source": "kraken XBTUSD 1d",
   "plan_b": {
     "mode": "UP",
     "mode_since": "2026-08-20",
     "switched_today": false,
     "target_pct": 100.0,
-    "sma": 73180.75,
-    "upper": 75376.17,
-    "lower": 70985.33,
-    "distance_to_switch": -0.117546,
+    "sma": 73191.51,
+    "upper": 75387.26,
+    "lower": 70995.76,
+    "distance_to_switch": -0.065598,
     "params": {
       "core": 0.5,
       "sma_days": 200,
@@ -29,7 +29,7 @@
     "decided_at": "2026-11-02T01:15:42+00:00",
     "confidence": "low",
     "stance": "从 85% 小幅降到 75%，不加杠杆。趋势仍是上涨模式（收盘 78,354，比 200 日均线高 7%），币安被盗事件的外溢也已经受控。但本周有几个相互独立的利空同时出现：史上最大的交易所被盗、PCE 通胀偏热、ETF 周五大额净流出，市场情绪也落入恐惧。价格两次收在上周设的 7.75 万减仓线下方，所以先降一点风险，明天还有中期选举这个事件风险。",
-    "age_days": 4,
+    "age_days": 5,
     "stale": false
   }
 }

@@ -122,25 +122,27 @@ function crossing(feat, lo, hi, th, rising) {
   return argBest(lo, hi, (i) => -Math.abs(feat[i] - th));
 }
 
-// 下杆真正开始的帧。通常取「双手从最高点下降超过挥杆高度 6%」的那一帧：很多人双手到顶后杆头还在继续上行，
-// 按双手最高点算会把这段时间算进下杆，节奏比偏低。
-// 但有人在顶点停顿、双手缓慢下沉，6% 很早就超过了（关键点在顶点附近还常有抖动）；这时改用「击球前最后一段
-// 连续下降」的起点——从击球往回找，双手一直在往上就继续，停住的地方就是真正发力下杆的时刻。
-// 两者相差超过顶点到击球用时的 30% 时以后者为准（按比例而不是秒数，慢动作视频也一样适用）。
+// 下杆开始的帧：双手从最高点下降超过挥杆高度 6% 的那一帧。很多人双手到顶后杆头还在继续上行，
+// 按双手最高点算会把这段时间算进下杆，节奏比偏低。节奏和上杆 / 下杆用时都按它算。
+// （下杆起初双手下降得慢、之后加速，这是正常的；不要把开头慢的这段当成顶点停顿算进上杆）
 export function transitionIndex(frames, P, handed) {
   const y = (i) => body(frames[i].lm, handed).hands.y;
   const top = y(P.P4), h = y(P.P7) - top;
-  let iDrop = P.P4;
-  while (iDrop < P.P7 - 1 && y(iDrop + 1) - top < 0.06 * h) iDrop++;
-  // 往回找：允许 3% 的抖动；以 2 帧为步长，避免单帧噪声
-  // 从双手最低的那一帧开始往回找（标注的击球帧有时双手已经开始上抬）
+  let i = P.P4;
+  while (i < P.P7 - 1 && y(i + 1) - top < 0.06 * h) i++;
+  return i;
+}
+
+// 击球前最后一段连续下降的起点：从双手最低处往回找，双手一直在往上就继续（允许 3% 抖动，2 帧一步）。
+// 只用来限定 P5、P6 的搜索范围——顶点附近关键点偶尔会抖一下（假的「下降」），P5 不能落在那里
+function descentStart(frames, P, handed) {
+  const y = (i) => body(frames[i].lm, handed).hands.y;
+  const h = y(P.P7) - y(P.P4);
   let iLow = P.P7;
   for (let i = P.P4; i <= P.P7; i++) if (y(i) > y(iLow)) iLow = i;
-  let iRun = iLow;
-  while (iRun - 2 >= P.P4 && y(iRun - 2) < y(iRun) + 0.03 * h) iRun -= 2;
-  const span = frames[P.P7].t - frames[P.P4].t;
-  const late = frames[iRun].t - frames[iDrop].t > 0.3 * span && iRun < iLow - 1;
-  return late ? iRun : iDrop;
+  let i = iLow;
+  while (i - 2 >= P.P4 && y(i - 2) < y(i) + 0.03 * h) i -= 2;
+  return i;
 }
 
 export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron', smoothed } = {}) {
@@ -217,8 +219,8 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
   const P = { P1: i1, P4: i4, P7: i7, P10: i10 };
   P.P2 = crossing(feat, i1, i4, th.P2, true);
   P.P3 = crossing(feat, P.P2, i4, th.P3, true);
-  // P5、P6 在真正开始下杆之后（顶点停顿、缓慢下沉期间不算）
-  const iT = transitionIndex(frames, { P4: i4, P7: i7 }, handed);
+  // P5、P6 在击球前最后一段连续下降里（排除顶点附近关键点的抖动）
+  const iT = descentStart(frames, { P4: i4, P7: i7 }, handed);
   P.P5 = crossing(feat, Math.max(i4, iT), i7, th.P5, false);
   P.P6 = crossing(feat, P.P5, i7, th.P6, false);
   if (v === 'fo') {

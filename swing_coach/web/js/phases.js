@@ -122,6 +122,28 @@ function crossing(feat, lo, hi, th, rising) {
   return argBest(lo, hi, (i) => -Math.abs(feat[i] - th));
 }
 
+// 下杆真正开始的帧。通常取「双手从最高点下降超过挥杆高度 6%」的那一帧：很多人双手到顶后杆头还在继续上行，
+// 按双手最高点算会把这段时间算进下杆，节奏比偏低。
+// 但有人在顶点停顿、双手缓慢下沉（一秒左右），6% 很早就超过了；这时改用速度判断——击球前双手向下的速度
+// 最后一次低于峰值 25% 的那一帧，两者相差超过 0.3 秒时以速度判断为准。
+export function transitionIndex(frames, P, handed) {
+  const y = (i) => body(frames[i].lm, handed).hands.y;
+  const n = frames.length;
+  const top = y(P.P4), h = y(P.P7) - top;
+  let iDrop = P.P4;
+  while (iDrop < P.P7 - 1 && y(iDrop + 1) - top < 0.06 * h) iDrop++;
+  const v = (i) => {
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+    return (y(b) - y(a)) / ((frames[b].t - frames[a].t) || 1);
+  };
+  let vmax = 0, iPeak = P.P4;
+  for (let i = P.P4; i <= P.P7; i++) if (v(i) > vmax) { vmax = v(i); iPeak = i; }
+  // 从下落最快处往回找（击球那一帧双手在最低点、速度接近 0，不能从那里开始找）
+  let iSpeed = iPeak;
+  while (iSpeed > P.P4 && v(iSpeed) >= 0.25 * vmax) iSpeed--;
+  return frames[iSpeed].t - frames[iDrop].t > 0.3 ? iSpeed : iDrop;
+}
+
 export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron', smoothed } = {}) {
   const frames = smoothed || smoothFrames(rawFrames);
   const n = frames.length;
@@ -196,7 +218,9 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
   const P = { P1: i1, P4: i4, P7: i7, P10: i10 };
   P.P2 = crossing(feat, i1, i4, th.P2, true);
   P.P3 = crossing(feat, P.P2, i4, th.P3, true);
-  P.P5 = crossing(feat, i4, i7, th.P5, false);
+  // P5、P6 在真正开始下杆之后（顶点停顿、缓慢下沉期间不算）
+  const iT = transitionIndex(frames, { P4: i4, P7: i7 }, handed);
+  P.P5 = crossing(feat, Math.max(i4, iT), i7, th.P5, false);
   P.P6 = crossing(feat, P.P5, i7, th.P6, false);
   if (v === 'fo') {
     P.P8 = crossing(feat, i7, i10, th.P8, false);

@@ -1,7 +1,7 @@
-// 用球确定击球帧：准备时找到地上的球（脚附近一个小而亮的圆点，不在鞋上），
-// 下杆时这一小块画面第一次明显变化（杆头到了、或者球飞走了）的那一帧就是击球。
-// 双手在击球前后每帧移动很大，按手的速度只能猜个大概；球的变化能精确到 ±1 帧。
-// 只依赖灰度像素数组，浏览器和 Node（测试）里都能运行。
+// 用球确定击球帧：在准备姿势里找到地上的球（脚附近一个小而亮的圆点，不在鞋上），逐帧检查这里还有没有球，
+// 「球最后一次还在原地」之后的那一帧就是击球（杆头盖住球、或球被打走）。
+// 双手在击球前后每帧移动很大，按手的速度只能猜个大概；慢动作视频结尾恢复正常速度时更会找错。
+// 球的变化和视频怎么放慢无关，能精确到 ±1 帧。只依赖灰度像素数组，浏览器和 Node（测试）里都能运行。
 
 const torsoOf = (lm) => Math.hypot((lm[11].x + lm[12].x - lm[23].x - lm[24].x) / 2, (lm[11].y + lm[12].y - lm[23].y - lm[24].y) / 2);
 
@@ -73,75 +73,41 @@ export function findBall(gray, w, h, lm, { view = 'fo', dir = 1 } = {}) {
   return best && best.contrast > (globalThis.BALL_MIN ?? 15) ? best : null;
 }
 
-// 在 img 里、球上一次位置附近找和准备时的球最像的地方（手持拍摄画面会慢慢漂移）。
-// 返回 { x, y, diff }：diff 是最佳位置的平均像素差，球还在时很小，被杆头挡住或飞走后变大。
-export function trackBall(ref, ball, img, w, h, at, search) {
-  const R = Math.ceil(ball.r * 1.6);
-  const cost = (cx, cy) => {
-    let s = 0, n = 0;
-    for (let dy = -R; dy <= R; dy += 1) {
-      for (let dx = -R; dx <= R; dx += 1) {
-        const x = cx + dx, y = cy + dy, rx = ball.x + dx, ry = ball.y + dy;
-        if (x < 0 || x >= w || y < 0 || y >= h || rx < 0 || rx >= w || ry < 0 || ry >= h) continue;
-        s += Math.abs(img[y * w + x] - ref[ry * w + rx]); n++;
+/**
+ * 不依赖 P 位置找击球帧：在第一帧（准备姿势）里找球，逐帧往后跟踪，
+ * 「球最后一次还在原地」之后那一帧就是击球（之后球就再也不在了）。
+ * 和视频怎么放慢、结尾是否恢复正常速度都无关，适合先用它作为 P7 的锚点。
+ * 返回 { frame, ball } 或 null。
+ */
+export async function findImpactByBall(frames, { gray, view, dir, start = 0 }) {
+  const g0 = await gray(start);
+  const { w, h } = g0;
+  const ball = findBall(g0.data, w, h, frames[start].lm, { view, dir });
+  if (!ball) return null;
+  const torso = torsoOf(frames[start].lm) * h;
+  const near = Math.max(4, Math.round(0.04 * torso));
+  // 「这里还有没有球」：附近小范围内圆点度最高的位置，圆点度不低于准备时的 45% 就算在。
+  // 不和准备时的画面比，因为准备时杆头贴在球旁边，起杆后这一小块本来就会变
+  const present = [];
+  let at = { x: ball.x, y: ball.y };
+  for (let i = start; i < frames.length; i++) {
+    const g = (await gray(i)).data;
+    let best = { x: at.x, y: at.y, s: -Infinity };
+    for (let dy = -near; dy <= near; dy += 2) {
+      for (let dx = -near; dx <= near; dx += 2) {
+        const v = blobScore(g, w, h, at.x + dx, at.y + dy, ball.r);
+        if (v > best.s) best = { x: at.x + dx, y: at.y + dy, s: v };
       }
     }
-    return n ? s / n : Infinity;
-  };
-  let best = { x: at.x, y: at.y, diff: cost(at.x, at.y) };
-  for (let dy = -search; dy <= search; dy += 2) {
-    for (let dx = -search; dx <= search; dx += 2) {
-      const c = cost(at.x + dx, at.y + dy);
-      if (c < best.diff) best = { x: at.x + dx, y: at.y + dy, diff: c };
-    }
+    const here = best.s >= 0.45 * ball.contrast;
+    present.push(here);
+    if (here) at = best; // 球还在时跟着画面漂移走
   }
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-    const c = cost(best.x + dx, best.y + dy);
-    if (c < best.diff) best = { x: best.x + dx, y: best.y + dy, diff: c };
-  }
-  return best;
-}
-
-/**
- * 找击球帧。frames：[{ t, lm }]；gray(i) 返回 { data, w, h }（与 lm 同一坐标系）；P 是已识别的位置。
- * 从准备姿势起逐帧跟踪球（每帧只允许小幅漂移），下杆后第一次「找不到球」的帧就是击球。
- * 返回 { frame, ball, trace } 或 null（没找到球、或上杆时球就不见了，说明找到的不是球）。
- */
-export async function detectImpact(frames, P, { gray, maxAfter = 0.5, view, dir }) {
-  const g1 = await gray(P.P1);
-  const { w, h } = g1;
-  const ball = findBall(g1.data, w, h, frames[P.P1].lm, { view, dir });
-  if (!ball) return null;
-  const torso = torsoOf(frames[P.P1].lm) * h;
-  const search = Math.max(8, Math.round(0.15 * torso));
-  // 准备时杆头贴在球旁边，起杆后杆头离开，这一小块会变；所以只用准备时的样子跟踪到上杆顶点（宽松阈值），
-  // 再以顶点时（杆头早已离开）的球作为参照
-  let at = { x: ball.x, y: ball.y };
-  const step = Math.max(1, Math.floor((P.P4 - P.P1) / 12));
-  for (let i = P.P1 + step; i < P.P4; i += step) {
-    const m = trackBall(g1.data, ball, (await gray(i)).data, w, h, at, search);
-    if (m.diff > 45) return null;
-    at = m;
-  }
-  const g4 = await gray(P.P4);
-  const m4 = trackBall(g1.data, ball, g4.data, w, h, at, search);
-  if (m4.diff > 45) return null;
-  const ref = g4.data, refBall = { ...ball, x: m4.x, y: m4.y };
-  // 顶点前后几帧的典型差异（球静止时的噪声水平）
-  const seen = [];
-  for (let i = Math.max(P.P1, P.P4 - 4); i < P.P4; i++) seen.push(trackBall(ref, refBall, (await gray(i)).data, w, h, refBall, 3).diff);
-  seen.sort((a, b) => a - b);
-  const base = seen.length ? seen[seen.length >> 1] : 8;
-  const trace = [];
-  // 下杆时逐帧比较，相邻两帧之间画面漂移很小，只允许小范围移动——否则会跟着刚被打出去的球走
-  const near = Math.max(4, Math.round(0.04 * torso));
-  at = refBall;
-  const limit = frames[P.P7].t + maxAfter;
-  for (let i = P.P4 + 1; i < frames.length && frames[i].t <= limit; i++) {
-    const m = trackBall(ref, refBall, (await gray(i)).data, w, h, at, near);
-    trace.push([i, m.diff]);
-    if (m.diff > Math.max(12, base * 1.8)) return { frame: i, ball: refBall, trace };
-    at = m;
+  // 最后一个「球还在」的帧：之后的帧里球基本都不在（允许个别误判）
+  for (let k = 0; k < present.length - 3; k++) {
+    if (!present[k] || present[k + 1]) continue;
+    const rest = present.slice(k + 1);
+    if (rest.filter((x) => !x).length / rest.length >= 0.85) return { frame: start + k + 1, ball: { ...ball, x: at.x, y: at.y } };
   }
   return null;
 }

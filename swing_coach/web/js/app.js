@@ -2,7 +2,7 @@
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases, findSwings } from './phases.js';
-import { detectImpact } from './impact.js';
+import { findImpactByBall } from './impact.js';
 import { makeContext, evaluate, summarize, formatValue, transitionIndex, aggregateResults, representativeIndex } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
@@ -29,13 +29,16 @@ let fileSeq = 0;
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
 if (isPhone) $('fps').value = '30';
 
+// 慢动作选项：iPhone 慢动作导出后都是 30fps，120 帧放慢 4 倍、240 帧放慢 8 倍
+const SLOW_OPTIONS = { 120: 4, 240: 8 };
+
 function settings() {
   return {
     handed: $('handed').value,
     club: $('club').value,
     // 「120 帧慢动作」：iPhone 导出的慢动作是放慢 4 倍的 30fps 视频，逐帧采样，时间除以 4 换算回真实时间
-    fps: $('fps').value === '120' ? 30 : Number($('fps').value),
-    slow: $('fps').value === '120' ? 4 : 1,
+    fps: SLOW_OPTIONS[$('fps').value] ? 30 : Number($('fps').value),
+    slow: SLOW_OPTIONS[$('fps').value] || 1,
     model: $('model').value,
   };
 }
@@ -151,7 +154,7 @@ $('newAnalysis').addEventListener('click', () => {
 // ---------- 分析流程 ----------
 function analyzeFrames(rawFrames, s, extra = {}) {
   const smoothed = smoothFrames(rawFrames);
-  const det = detectPhases(rawFrames, { handed: s.handed, view: s.view, club: s.club, smoothed });
+  const det = detectPhases(rawFrames, { handed: s.handed, view: s.view, club: s.club, smoothed, impact: extra.impact?.frame });
   const a = {
     ...extra, settings: s, raw: rawFrames, frames: smoothed, speed: det.speed,
     view: det.view, dir: det.dir, autoP: { ...det.P }, P: { ...det.P },
@@ -173,9 +176,11 @@ function phaseSanity(a) {
   return null;
 }
 
-// 看起来是没换算的慢动作：真人下杆（顶点到击球）不超过约 0.5 秒，超过 0.8 秒只能是放慢了。
+// 看起来是没换算的慢动作：真人下杆不超过约 0.5 秒，超过 0.8 秒只能是放慢了。
 // 节奏是比例，均匀放慢不影响；只有用时需要在「采样帧率」里选慢动作换算
-const isSlowMo = (a) => !a.pro && a.frames[a.P.P7].t - a.frames[a.P.P4].t > 0.8;
+// 从下杆开始（双手下降 6%）算，顶点真正的停顿不计入，避免把在顶点停一下的真人挥杆当成慢动作
+const downswingTime = (a) => a.frames[a.P.P7].t - a.frames[transitionIndex(a.frames, a.P, a.settings.handed)].t;
+const isSlowMo = (a) => !a.pro && downswingTime(a) > 0.8;
 
 function score(a) {
   const impact = a.impact ? { frame: a.impact.frame, ball: a.impact.ballLm } : null;
@@ -222,16 +227,28 @@ async function analyzeVideo(video, s, label = '') {
   const { frames: filled, missingRatio } = fillMissing(frames);
   if (missingRatio > 0.4) throw new Error(`${label}超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足`);
   toRealTime(filled, s);
-  const a = analyzeFrames(filled, s, { aspect, source: frameSource(filled) });
-  a.missingRatio = missingRatio;
+  const extra = { aspect, source: frameSource(filled) };
+  let a = analyzeFrames(filled, s, extra);
+  // 先用画面里的球确定击球帧，再以它为准重新找各个位置（慢动作视频结尾恢复正常速度时，按手速会找错击球）
   setProgress(1, `${label}确定击球帧…`);
-  await locateImpact(a, filled);
+  extra.impact = await impactFromBall(a, filled);
+  if (extra.impact) a = analyzeFrames(filled, s, extra);
+  // 没选慢动作、但看起来是慢动作（下杆在视频里超过 0.8 秒）：按下杆用时估计放慢倍数，换算后重新分析。
+  // 真人下杆约 0.25–0.45 秒，视频里 2.4 秒以内按 4 倍（120 帧），更长按 8 倍（240 帧）
+  if ((s.slow || 1) === 1 && isSlowMo(a)) {
+    const factor = downswingTime(a) < 2.4 ? 4 : 8;
+    const s2 = { ...s, slow: factor, autoSlow: true };
+    toRealTime(filled, s2);
+    a = analyzeFrames(filled, s2, extra);
+  }
+  a.missingRatio = missingRatio;
   return a;
 }
 
-// 用画面里的球确定击球帧：找到了就用它作为 P7（比按手速判断准），并用于杆身前倾
-async function locateImpact(a, frames) {
-  if (!frames[a.P.P1]?.img) return;
+// 用画面里的球确定击球帧：从第一帧（准备姿势）找到球，球最后一次还在原地之后的那一帧就是击球。
+// 返回 { frame, ballLm }（球的位置用关键点同样的单位），找不到返回 null
+async function impactFromBall(a, frames) {
+  if (!frames[0]?.img) return null;
   const cache = new Map();
   const canvas = document.createElement('canvas');
   const c2d = canvas.getContext('2d', { willReadFrequently: true });
@@ -249,15 +266,13 @@ async function locateImpact(a, frames) {
     return g;
   };
   try {
-    const res = await detectImpact(a.frames, a.P, { gray, view: a.view, dir: a.dir });
-    if (!res) return;
-    const H = (await gray(a.P.P1)).h;
-    a.impact = { frame: res.frame, ballLm: { x: res.ball.x / H, y: res.ball.y / H } };
-    // 击球帧在 P6 和 P8 之间才替换 P7，避免打乱位置顺序
-    if (res.frame > a.P.P6 && res.frame < a.P.P8) a.P.P7 = a.autoP.P7 = res.frame;
-    score(a);
+    const res = await findImpactByBall(a.frames, { gray, view: a.view, dir: a.dir });
+    if (!res) return null;
+    const H = (await gray(0)).h;
+    return { frame: res.frame, ballLm: { x: res.ball.x / H, y: res.ball.y / H } };
   } catch (err) {
     console.warn('击球帧识别失败', err);
+    return null;
   }
 }
 
@@ -405,6 +420,8 @@ async function renderAll({ scroll = true } = {}) {
     a.pathCrop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect, { ratio: 1, pad: 0.1 });
   }
   const warnings = list.map((a) => a.viewWarning || a.phaseWarning).filter(Boolean);
+  const auto = list.find((a) => a.settings.autoSlow);
+  if (auto) warnings.push(`已自动识别为慢动作视频，按约 ${auto.settings.slow} 倍换算成真实时间（iPhone 慢动作导出后都是 30 帧：120 帧放慢约 4 倍、240 帧约 8 倍）。如果倍数不对，请在「采样帧率」里手动选择后重新分析。`);
   if (list.some((a) => a.slowMo)) warnings.push('看起来是慢动作视频：节奏比例照常计算；上杆 / 下杆用时是放慢后的视频时间。如果是 120 帧慢动作，在「采样帧率」里选「120 帧慢动作」再分析，就会换算成真实时间。');
   if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
   if (warnings.length) showError(warnings.join(' '));

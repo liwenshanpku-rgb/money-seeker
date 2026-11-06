@@ -32,7 +32,8 @@ for (const view of ['fo', 'dtl']) {
   for (const club of ['iron', 'driver']) {
     test(`职业模板自身全部达标（${view}, ${club}）`, () => {
       const { results } = run({ view, club, noise: 0 });
-      const bad = results.filter((r) => r.status !== 'good' && !(r.status === 'ref' && r.value >= r.range[0] && r.value <= r.range[1])).map((r) => `${r.id}=${r.value}`);
+      // 合成挥杆没有画面里的球，需要击球帧的检查项为「无法判断」
+      const bad = results.filter((r) => r.status !== 'good' && !r.noImpact && !(r.status === 'ref' && r.value >= r.range[0] && r.value <= r.range[1])).map((r) => `${r.id}=${r.value}`);
       assert.deepEqual(bad, []);
       assert.equal(summarize(results).score, 100);
     });
@@ -268,4 +269,28 @@ test('慢速挥杆：准备很久、上杆很慢，窗口仍包含准备姿势�
   assert.ok(Math.abs(sub[det.P.P7].t - (6 + timing.P7)) < 0.1, `击球 ${sub[det.P.P7].t}`);
   assert.ok(Math.abs(sub[det.P.P4].t - (6 + timing.P4)) < 0.2, `顶点 ${sub[det.P.P4].t}`);
   assert.ok(sub[det.P.P1].t < 6 + 0.3, `准备 ${sub[det.P.P1].t}`);
+});
+
+test('杆身前倾：按球确定的击球帧计算，双手在球后为负（捞球）', () => {
+  const s = syntheticSwing({ view: 'fo', noise: 0 });
+  const det = detectPhases(s.frames, {});
+  const i = det.P.P7, lm = det.frames[i].lm;
+  // 这里只验证角度的几何关系：让击球前后一帧的双手不动，排除延迟补偿的影响
+  det.frames[i - 1] = { ...det.frames[i - 1], lm };
+  det.frames[i + 1] = { ...det.frames[i + 1], lm };
+  const hands = { x: (lm[15].x + lm[16].x) / 2, y: (lm[15].y + lm[16].y) / 2 };
+  const drop = 0.45; // 双手到球的竖直距离（视频高度单位）
+  const mk = (ahead) => makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron',
+    impact: { frame: i, ball: { x: hands.x - det.dir * ahead, y: hands.y + drop } } });
+  const lean = (ahead) => evaluate(mk(ahead)).find((r) => r.id === 'fo_p7_shaftlean');
+  const good = lean(Math.tan(15 * Math.PI / 180) * drop);
+  assert.ok(Math.abs(good.value - 15) < 0.5, String(good.value));
+  assert.equal(good.status, 'good');
+  const scoop = lean(-Math.tan(8 * Math.PI / 180) * drop);
+  assert.ok(Math.abs(scoop.value + 8) < 0.5, String(scoop.value));
+  assert.equal(scoop.side, 'low');
+  assert.match(scoop.tpi.name, /Scooping/);
+  const none = evaluate(makeContext(det.frames, det.P, { view: 'fo', dir: det.dir, handed: 'right', club: 'iron' })).find((r) => r.id === 'fo_p7_shaftlean');
+  assert.equal(none.status, 'na');
+  assert.ok(none.noImpact);
 });

@@ -2,6 +2,7 @@
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases, findSwings } from './phases.js';
+import { detectImpact } from './impact.js';
 import { makeContext, evaluate, summarize, formatValue, transitionIndex, aggregateResults, representativeIndex } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
@@ -175,7 +176,8 @@ function phaseSanity(a) {
 const isSlowMo = (a) => !a.pro && a.frames[a.P.P7].t - a.frames[a.P.P4].t > 0.8;
 
 function score(a) {
-  const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club });
+  const impact = a.impact ? { frame: a.impact.frame, ball: a.impact.ballLm } : null;
+  const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club, impact });
   a.slowMo = isSlowMo(a);
   a.results = evaluate(ctx).map((r) => ({ ...r, view: a.view }))
     .map((r) => (a.slowMo && r.id === 'tempo' ? { ...r, value: NaN, status: 'na', severity: 0, side: undefined, advice: null, tpi: null, slowMo: true } : r));
@@ -218,7 +220,41 @@ async function analyzeVideo(video, s, label = '') {
   if (missingRatio > 0.4) throw new Error(`${label}超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足`);
   const a = analyzeFrames(filled, s, { aspect, source: frameSource(filled) });
   a.missingRatio = missingRatio;
+  setProgress(1, `${label}确定击球帧…`);
+  await locateImpact(a, filled);
   return a;
+}
+
+// 用画面里的球确定击球帧：找到了就用它作为 P7（比按手速判断准），并用于杆身前倾
+async function locateImpact(a, frames) {
+  if (!frames[a.P.P1]?.img) return;
+  const cache = new Map();
+  const canvas = document.createElement('canvas');
+  const c2d = canvas.getContext('2d', { willReadFrequently: true });
+  const gray = async (i) => {
+    if (cache.has(i)) return cache.get(i);
+    const bmp = await createImageBitmap(frames[i].img);
+    canvas.width = bmp.width; canvas.height = bmp.height;
+    c2d.drawImage(bmp, 0, 0);
+    bmp.close?.();
+    const px = c2d.getImageData(0, 0, canvas.width, canvas.height).data;
+    const data = new Float32Array(canvas.width * canvas.height);
+    for (let k = 0, j = 0; k < data.length; k++, j += 4) data[k] = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
+    const g = { data, w: canvas.width, h: canvas.height };
+    cache.set(i, g);
+    return g;
+  };
+  try {
+    const res = await detectImpact(a.frames, a.P, { gray, view: a.view, dir: a.dir });
+    if (!res) return;
+    const H = (await gray(a.P.P1)).h;
+    a.impact = { frame: res.frame, ballLm: { x: res.ball.x / H, y: res.ball.y / H } };
+    // 击球帧在 P6 和 P8 之间才替换 P7，避免打乱位置顺序
+    if (res.frame > a.P.P6 && res.frame < a.P.P8) a.P.P7 = a.autoP.P7 = res.frame;
+    score(a);
+  } catch (err) {
+    console.warn('击球帧识别失败', err);
+  }
 }
 
 // 一个视频：短视频当作一杆；长视频先低帧率粗扫找出每一杆，再逐杆分析。每一杆各自识别正面 / 侧面
@@ -513,6 +549,7 @@ function renderTable() {
     : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大（不同视频之间也不稳定），只显示数值，不计入评分，请结合画面判断。<details><summary>说明</summary>${r.metric.about}</details>`
     : r.slowMo ? '这是慢动作视频：iPhone 导出的慢动作开头、结尾是正常速度，中间放慢，时间不均匀，节奏没法测量。要看节奏请用普通 60fps 拍摄；慢动作适合看关键位置和角度。'
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
+    : r.noImpact ? '没有在画面里找到球（或球在上杆时就被挡住），无法确定击球的那一帧。拍摄时让球在画面里、清晰可见即可。'
     : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'
     : `<details><summary>说明</summary>${r.metric.about}</details>`);
   // 手机上每一行显示为一张小卡片（见 style.css），各单元格用 class 定位

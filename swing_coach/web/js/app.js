@@ -2,7 +2,7 @@
 
 import { extractPoses, fillMissing, primeVideo, videoDuration } from './pose.js';
 import { smoothFrames, detectPhases, findSwings } from './phases.js';
-import { detectImpact } from './impact.js';
+import { findImpactByBall } from './impact.js';
 import { makeContext, evaluate, summarize, formatValue, transitionIndex, aggregateResults, representativeIndex } from './metrics.js';
 import { POSITIONS, POSITION_INFO, PRO_PARAMS, PRO_TIMING, syntheticSwing } from './template.js';
 import {
@@ -154,7 +154,7 @@ $('newAnalysis').addEventListener('click', () => {
 // ---------- 分析流程 ----------
 function analyzeFrames(rawFrames, s, extra = {}) {
   const smoothed = smoothFrames(rawFrames);
-  const det = detectPhases(rawFrames, { handed: s.handed, view: s.view, club: s.club, smoothed });
+  const det = detectPhases(rawFrames, { handed: s.handed, view: s.view, club: s.club, smoothed, impact: extra.impact?.frame });
   const a = {
     ...extra, settings: s, raw: rawFrames, frames: smoothed, speed: det.speed,
     view: det.view, dir: det.dir, autoP: { ...det.P }, P: { ...det.P },
@@ -227,24 +227,28 @@ async function analyzeVideo(video, s, label = '') {
   const { frames: filled, missingRatio } = fillMissing(frames);
   if (missingRatio > 0.4) throw new Error(`${label}超过 40% 的帧没有识别到人体，请确保全身在画面中、光线充足`);
   toRealTime(filled, s);
-  let a = analyzeFrames(filled, s, { aspect, source: frameSource(filled) });
-  // 没选慢动作、但看起来是慢动作（顶点到击球在视频里超过 0.8 秒）：按下杆用时估计放慢倍数，换算后重新分析。
+  const extra = { aspect, source: frameSource(filled) };
+  let a = analyzeFrames(filled, s, extra);
+  // 先用画面里的球确定击球帧，再以它为准重新找各个位置（慢动作视频结尾恢复正常速度时，按手速会找错击球）
+  setProgress(1, `${label}确定击球帧…`);
+  extra.impact = await impactFromBall(a, filled);
+  if (extra.impact) a = analyzeFrames(filled, s, extra);
+  // 没选慢动作、但看起来是慢动作（下杆在视频里超过 0.8 秒）：按下杆用时估计放慢倍数，换算后重新分析。
   // 真人下杆约 0.25–0.45 秒，视频里 2.4 秒以内按 4 倍（120 帧），更长按 8 倍（240 帧）
   if ((s.slow || 1) === 1 && isSlowMo(a)) {
     const factor = downswingTime(a) < 2.4 ? 4 : 8;
     const s2 = { ...s, slow: factor, autoSlow: true };
     toRealTime(filled, s2);
-    a = analyzeFrames(filled, s2, { aspect, source: frameSource(filled) });
+    a = analyzeFrames(filled, s2, extra);
   }
   a.missingRatio = missingRatio;
-  setProgress(1, `${label}确定击球帧…`);
-  await locateImpact(a, filled);
   return a;
 }
 
-// 用画面里的球确定击球帧：找到了就用它作为 P7（比按手速判断准），并用于杆身前倾
-async function locateImpact(a, frames) {
-  if (!frames[a.P.P1]?.img) return;
+// 用画面里的球确定击球帧：从第一帧（准备姿势）找到球，球最后一次还在原地之后的那一帧就是击球。
+// 返回 { frame, ballLm }（球的位置用关键点同样的单位），找不到返回 null
+async function impactFromBall(a, frames) {
+  if (!frames[0]?.img) return null;
   const cache = new Map();
   const canvas = document.createElement('canvas');
   const c2d = canvas.getContext('2d', { willReadFrequently: true });
@@ -262,15 +266,13 @@ async function locateImpact(a, frames) {
     return g;
   };
   try {
-    const res = await detectImpact(a.frames, a.P, { gray, view: a.view, dir: a.dir });
-    if (!res) return;
-    const H = (await gray(a.P.P1)).h;
-    a.impact = { frame: res.frame, ballLm: { x: res.ball.x / H, y: res.ball.y / H } };
-    // 击球帧在 P6 和 P8 之间才替换 P7，避免打乱位置顺序
-    if (res.frame > a.P.P6 && res.frame < a.P.P8) a.P.P7 = a.autoP.P7 = res.frame;
-    score(a);
+    const res = await findImpactByBall(a.frames, { gray, view: a.view, dir: a.dir });
+    if (!res) return null;
+    const H = (await gray(0)).h;
+    return { frame: res.frame, ballLm: { x: res.ball.x / H, y: res.ball.y / H } };
   } catch (err) {
     console.warn('击球帧识别失败', err);
+    return null;
   }
 }
 

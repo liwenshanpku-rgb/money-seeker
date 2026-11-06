@@ -145,7 +145,7 @@ function descentStart(frames, P, handed) {
   return i;
 }
 
-export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron', smoothed } = {}) {
+export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron', smoothed, impact } = {}) {
   const frames = smoothed || smoothFrames(rawFrames);
   const n = frames.length;
   if (n < 10) throw new Error('视频太短，至少需要 10 帧');
@@ -167,9 +167,12 @@ export function detectPhases(rawFrames, { handed = 'right', view, club = 'iron',
   if (!(vmax > 0)) throw new Error('没有检测到挥杆动作');
 
   // P7：手速峰值 ±0.1 秒内双手最低（y 最大）的帧
-  const i7 = argBest(Math.max(0, iFast - sec(0.1)), Math.min(n - 1, iFast + sec(0.1)), (i) => hands[i].y);
+  // 已用画面里的球确定了击球帧时直接用它（慢动作视频结尾恢复正常速度，按手速会找错）
+  const i7 = impact != null && impact > 2 && impact < n ? impact
+    : argBest(Math.max(0, iFast - sec(0.1)), Math.min(n - 1, iFast + sec(0.1)), (i) => hands[i].y);
   // P4：击球前 3.5 秒内双手最高（顶点停顿较久的慢速挥杆，顶点离击球可能超过 2 秒）
-  const i4 = argBest(Math.max(0, i7 - sec(3.5)), Math.max(0, i7 - 2), (i) => -hands[i].y);
+  // 击球帧来自球时，顶点在击球前的任何位置（慢动作里上杆可能很长）
+  const i4 = argBest(impact != null ? 0 : Math.max(0, i7 - sec(3.5)), Math.max(0, i7 - 2), (i) => -hands[i].y);
   const swingH = hands[i7].y - hands[i4].y;
   // 侧面视角里起杆初段双手主要沿镜头纵深移动，画面上很慢，所以静止阈值更低
   const v0 = view || detectView(frames[Math.max(0, i4 - sec(1))].lm, handed);

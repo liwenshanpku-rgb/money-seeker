@@ -162,15 +162,23 @@ function analyzeFrames(rawFrames, s, extra = {}) {
 function phaseSanity(a) {
   const t = (p) => a.frames[a.P[p]].t;
   const same = ['P2', 'P3', 'P4', 'P5', 'P6', 'P7'].some((p, i, arr) => i > 0 && a.P[p] === a.P[arr[i - 1]]);
-  if (same || t('P4') - t('P1') > 3.5 || t('P7') - t('P4') > 2.5 || a.P.P1 === 0 && a.P.P2 <= 2) {
+  // 慢动作视频的时间被拉长了，不按用时判断
+  const badTime = !isSlowMo(a) && (t('P4') - t('P1') > 3.5 || t('P7') - t('P4') > 2.5);
+  if (same || badTime || a.P.P1 === 0 && a.P.P2 <= 2) {
     return `${VIEW_SHORT[a.view] || ''}视频里这一杆的关键位置可能识别有误（例如两个位置落在同一帧、上杆或下杆用时不合理）。请对照下面的画面检查，可以在「P 位置校正」里手动调整。`;
   }
   return null;
 }
 
+// 慢动作视频：真人下杆（顶点到击球）不超过约 0.5 秒，视频里超过 0.8 秒只能是放慢了。
+// iPhone 导出的慢动作开头、结尾是正常速度，中间放慢，时间不均匀，节奏和用时都没法换算
+const isSlowMo = (a) => !a.pro && a.frames[a.P.P7].t - a.frames[a.P.P4].t > 0.8;
+
 function score(a) {
   const ctx = makeContext(a.frames, a.P, { view: a.view, dir: a.dir, handed: a.settings.handed, club: a.settings.club });
-  a.results = evaluate(ctx).map((r) => ({ ...r, view: a.view }));
+  a.slowMo = isSlowMo(a);
+  a.results = evaluate(ctx).map((r) => ({ ...r, view: a.view }))
+    .map((r) => (a.slowMo && r.id === 'tempo' ? { ...r, value: NaN, status: 'na', severity: 0, side: undefined, advice: null, tpi: null, slowMo: true } : r));
   a.oblique = a.view === 'fo' && ctx.oblique();
   a.summary = summarize(a.results);
   a.ref = { lm: a.frames[a.P.P1].lm, dir: a.dir };
@@ -348,6 +356,7 @@ async function renderAll({ scroll = true } = {}) {
     a.pathCrop = cropBox(POSITIONS.map((p) => a.frames[a.P[p]].lm), a.aspect, { ratio: 1, pad: 0.1 });
   }
   const warnings = list.map((a) => a.viewWarning || a.phaseWarning).filter(Boolean);
+  if (list.some((a) => a.slowMo)) warnings.push('检测到慢动作视频：节奏和上杆 / 下杆用时不计算（慢动作视频的时间被不均匀地拉长了），关键位置和角度不受影响。');
   if (list.some((a) => a.oblique)) warnings.push('正面视频看起来是斜着拍的：髋部、肩部转动几项已标为「无法判断」，站位宽度和侧倾也可能有偏差。正面请把相机放在正前方、胸口高度、与目标线垂直。');
   if (warnings.length) showError(warnings.join(' '));
   renderSummary();
@@ -376,6 +385,7 @@ const multi = () => analyses().length > 1;
 const viewTag = (r) => (multi() ? `<span class="tag">${VIEW_SHORT[r.view]}</span>` : '');
 
 function tempoText(a) {
+  if (a.slowMo) return '慢动作视频无法测';
   const r = resultsOf(a).find((x) => x.id === 'tempo');
   return r && Number.isFinite(r.value) ? `${r.value.toFixed(1)} : 1` : '—';
 }
@@ -396,7 +406,7 @@ function renderSummary() {
       // 和节奏一致：下杆从双手开始下落算起
       const tt = a.frames[transitionIndex(a.frames, a.P, a.settings.handed)].t;
       const which = [multi() ? VIEW_SHORT[a.view] : '', a.group ? `第 ${a.swingNo} 杆` : ''].filter(Boolean).join(' ');
-      return [`上杆 / 下杆用时${which ? `（${which}）` : ''}`, `${(tt - t('P1')).toFixed(2)}s / ${(t('P7') - tt).toFixed(2)}s`];
+      return [`上杆 / 下杆用时${which ? `（${which}）` : ''}`, a.slowMo ? '慢动作视频，不计算' : `${(tt - t('P1')).toFixed(2)}s / ${(t('P7') - tt).toFixed(2)}s`];
     }),
     ...(first.demo ? [['数据来源', '示例合成挥杆']] : []),
     ['对比模板', state.pro ? `内置职业模板 + ${state.pro.name}` : '内置职业模板'],
@@ -501,6 +511,7 @@ function renderTable() {
   const note = (r) => (r.advice
     ? `<b>${r.advice.issue}</b>${tpiTag(r)}：${r.advice.why}<br><b>改进：</b>${r.advice.fix}<br><b>练习：</b>${r.advice.drill}${r.tpi ? `<br><b>身体自测：</b>${r.tpi.screen}` : ''}`
     : r.status === 'ref' ? `参考值：单机位视频估算这一项的误差较大（不同视频之间也不稳定），只显示数值，不计入评分，请结合画面判断。<details><summary>说明</summary>${r.metric.about}</details>`
+    : r.slowMo ? '这是慢动作视频：iPhone 导出的慢动作开头、结尾是正常速度，中间放慢，时间不均匀，节奏没法测量。要看节奏请用普通 60fps 拍摄；慢动作适合看关键位置和角度。'
     : r.oblique ? '正面相机没有正对胸口（斜着拍），无法估算转动角度。请把相机放在正前方、与目标线垂直后重拍。'
     : r.lowVis ? '关键点在这一帧不够清晰，无法可靠测量。'
     : `<details><summary>说明</summary>${r.metric.about}</details>`);

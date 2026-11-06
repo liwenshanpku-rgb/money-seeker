@@ -19,7 +19,10 @@ d.images = {};
 for (const [pos, i] of Object.entries(d.P)) {
   const f = d.frames[i];
   const out = path.join(imgDir, `${base}-${pos}.jpg`);
-  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', video, '-ss', String(f.vt ?? f.t), '-frames:v', '1', '-vf', 'scale=-2:640', '-q:v', '5', out]);
+  // 数据里的时间保留 4 位小数，可能比该帧的真实时间略晚一点（1.766667 → 1.7667），
+  // ffmpeg 会取「不早于这个时间的第一帧」，于是拿到下一帧；往前退 2 毫秒取回原来那一帧
+  const at = Math.max(0, (f.vt ?? f.t) - 0.002);
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', video, '-ss', at.toFixed(4), '-frames:v', '1', '-vf', 'scale=-2:640', '-q:v', '5', out]);
   d.images[pos] = path.relative(webDir, out);
 }
 if (credit) d.imageCredit = credit;

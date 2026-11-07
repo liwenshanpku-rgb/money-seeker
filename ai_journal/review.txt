@@ -1,9 +1,9 @@
-区间: 2026-10-19 ~ 2026-11-05（18 天，3 次决定）
-平均 AI 仓位: 85%
+区间: 2026-10-19 ~ 2026-11-06（19 天，3 次决定）
+平均 AI 仓位: 84%
                total_return  max_drawdown  sharpe
-ai                   -0.058        -0.080  -3.517
-buy_hold             -0.071        -0.095  -3.469
-core50_sma200        -0.071        -0.095  -3.469
+ai                   -0.060        -0.082  -3.568
+buy_hold             -0.074        -0.098  -3.533
+core50_sma200        -0.074        -0.098  -3.533
 ! 样本不到半年，结果主要是噪音，不要据此下结论。
 
 校准（4 次决定；每组至少 20 次才有参考价值）
@@ -11,5 +11,5 @@ core50_sma200        -0.071        -0.095  -3.469
   medium: 1 次
 
 AI 波段模拟盘（自 2026-11-05 起，1 次波段决定）
-  ai_swing -4.1%   ai -4.1%   buy_hold -5.5%   core50_sma200 -5.5%
+  ai_swing -4.3%   ai -4.3%   buy_hold -5.8%   core50_sma200 -5.8%
 图: /home/runner/work/money-seeker/money-seeker/journal/ai_journal/review.png

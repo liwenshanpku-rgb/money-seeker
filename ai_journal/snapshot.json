@@ -1,17 +1,17 @@
 {
-  "as_of_close_utc": "2026-11-07",
-  "btc_close_usd": 75867.59,
+  "as_of_close_utc": "2026-11-08",
+  "btc_close_usd": 74851.44,
   "returns": {
-    "7d": -0.0221,
-    "30d": -0.072,
-    "90d": 0.169,
-    "365d": -0.2658
+    "7d": -0.0447,
+    "30d": -0.0942,
+    "90d": 0.1701,
+    "365d": -0.2684
   },
-  "sma50": 81949.6,
-  "sma200": 73240.19,
-  "pct_vs_sma200": 0.0359,
-  "realized_vol_30d_annualized": 0.3551,
-  "drawdown_from_all_time_high": -0.3914,
+  "sma50": 81821.62,
+  "sma200": 73223.56,
+  "pct_vs_sma200": 0.0222,
+  "realized_vol_30d_annualized": 0.3538,
+  "drawdown_from_all_time_high": -0.3995,
   "all_time_high_in_data": 124658.54,
   "trend_rule_mode": "UP",
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 上涨模式",
@@ -19,15 +19,15 @@
     "source": "hyperliquid",
     "avg_1d_annualized": 0.1095,
     "avg_7d_annualized": 0.1027,
-    "avg_30d_annualized": 0.0886,
+    "avg_30d_annualized": 0.0907,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 41754.43,
-    "open_interest_usd": 3163607713,
-    "mark_price": 75767.0,
-    "volume_24h_usd": 512903581
+    "open_interest_btc": 41768.21,
+    "open_interest_usd": 3130611201,
+    "mark_price": 74952.0,
+    "volume_24h_usd": 2026128103
   },
   "us_3m_tbill": 0.04,
   "structured_data": {
@@ -44,35 +44,35 @@
         },
         {
           "date": "2026-10-27",
-          "total_musd": 141.9
+          "total_musd": 140.6
         },
         {
           "date": "2026-10-28",
-          "total_musd": 149.6
+          "total_musd": 148.1
         },
         {
           "date": "2026-10-29",
-          "total_musd": 29.6
+          "total_musd": 29.3
         },
         {
           "date": "2026-10-30",
-          "total_musd": -525.5
+          "total_musd": -520.5
         },
         {
           "date": "2026-11-02",
-          "total_musd": -464.2
+          "total_musd": -459.8
         },
         {
           "date": "2026-11-04",
-          "total_musd": 21.7
+          "total_musd": 21.5
         },
         {
           "date": "2026-11-05",
-          "total_musd": -447.6
+          "total_musd": -443.4
         }
       ],
-      "sum_last_5_days_musd": -1386.0,
-      "sum_last_10_days_musd": -1094.6
+      "sum_last_5_days_musd": -1372.9,
+      "sum_last_10_days_musd": -1084.3
     },
     "onchain": {
       "source": "coinmetrics community",
@@ -85,15 +85,10 @@
     },
     "stablecoins": {
       "source": "defillama",
-      "total_usd_bn": 292.4,
-      "change_30d_pct": -4.65
+      "total_usd_bn": 293.0,
+      "change_30d_pct": -4.25
     },
     "fear_greed": [
-      {
-        "date": "2026-11-02",
-        "value": 37,
-        "label": "Fear"
-      },
       {
         "date": "2026-11-03",
         "value": 26,
@@ -122,6 +117,11 @@
       {
         "date": "2026-11-08",
         "value": 28,
+        "label": "Fear"
+      },
+      {
+        "date": "2026-11-09",
+        "value": 29,
         "label": "Fear"
       }
     ]

@@ -18,16 +18,16 @@
   "perp_funding": {
     "source": "hyperliquid",
     "avg_1d_annualized": 0.1095,
-    "avg_7d_annualized": 0.1027,
-    "avg_30d_annualized": 0.0907,
+    "avg_7d_annualized": 0.1026,
+    "avg_30d_annualized": 0.0912,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 41752.32,
-    "open_interest_usd": 3129670041,
-    "mark_price": 74958.0,
-    "volume_24h_usd": 2027166115
+    "open_interest_btc": 41362.05,
+    "open_interest_usd": 3059141039,
+    "mark_price": 73960.1,
+    "volume_24h_usd": 2519599363
   },
   "us_3m_tbill": 0.04,
   "structured_data": {
@@ -44,49 +44,49 @@
         },
         {
           "date": "2026-10-27",
-          "total_musd": 140.6
+          "total_musd": 138.8
         },
         {
           "date": "2026-10-28",
-          "total_musd": 148.1
+          "total_musd": 146.3
         },
         {
           "date": "2026-10-29",
-          "total_musd": 29.3
+          "total_musd": 29.0
         },
         {
           "date": "2026-10-30",
-          "total_musd": -520.5
+          "total_musd": -514.0
         },
         {
           "date": "2026-11-02",
-          "total_musd": -459.8
+          "total_musd": -454.0
         },
         {
           "date": "2026-11-04",
-          "total_musd": 21.5
+          "total_musd": 21.3
         },
         {
           "date": "2026-11-05",
-          "total_musd": -443.4
+          "total_musd": -437.8
         }
       ],
-      "sum_last_5_days_musd": -1372.9,
-      "sum_last_10_days_musd": -1084.3
+      "sum_last_5_days_musd": -1355.5,
+      "sum_last_10_days_musd": -1070.5
     },
     "onchain": {
       "source": "coinmetrics community",
-      "as_of": "2026-11-07",
-      "mvrv": 1.404,
-      "mvrv_30d_ago": 1.519,
-      "active_addresses_7d_avg": 668610,
-      "active_addresses_30d_avg": 638108,
+      "as_of": "2026-11-08",
+      "mvrv": 1.39,
+      "mvrv_30d_ago": 1.534,
+      "active_addresses_7d_avg": 670700,
+      "active_addresses_30d_avg": 636125,
       "note": "MVRV = 市值 / 已实现市值；历史上 >3 偏热，<1 是深度低估"
     },
     "stablecoins": {
       "source": "defillama",
-      "total_usd_bn": 293.2,
-      "change_30d_pct": -4.37
+      "total_usd_bn": 293.0,
+      "change_30d_pct": -4.26
     },
     "fear_greed": [
       {

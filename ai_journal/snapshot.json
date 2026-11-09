@@ -24,10 +24,10 @@
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 41768.21,
-    "open_interest_usd": 3130611201,
-    "mark_price": 74952.0,
-    "volume_24h_usd": 2026128103
+    "open_interest_btc": 41752.32,
+    "open_interest_usd": 3129670041,
+    "mark_price": 74958.0,
+    "volume_24h_usd": 2027166115
   },
   "us_3m_tbill": 0.04,
   "structured_data": {
@@ -85,8 +85,8 @@
     },
     "stablecoins": {
       "source": "defillama",
-      "total_usd_bn": 293.0,
-      "change_30d_pct": -4.25
+      "total_usd_bn": 293.2,
+      "change_30d_pct": -4.37
     },
     "fear_greed": [
       {

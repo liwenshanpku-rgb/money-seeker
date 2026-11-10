@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-09T09:51:45+00:00",
-  "as_of_close_utc": "2026-11-08",
-  "price": 74737.9,
+  "generated_at": "2026-11-10T07:46:17+00:00",
+  "as_of_close_utc": "2026-11-09",
+  "price": 75253.1,
   "price_source": "kraken XBTUSD 1d",
   "plan_b": {
     "mode": "UP",
     "mode_since": "2026-08-20",
     "switched_today": false,
     "target_pct": 100.0,
-    "sma": 73170.66,
-    "upper": 75365.78,
-    "lower": 70975.54,
-    "distance_to_switch": -0.050341,
+    "sma": 73155.5,
+    "upper": 75350.17,
+    "lower": 70960.84,
+    "distance_to_switch": -0.057038,
     "params": {
       "core": 0.5,
       "sma_days": 200,
@@ -29,7 +29,7 @@
     "decided_at": "2026-11-09T01:18:18+00:00",
     "confidence": "medium",
     "stance": "从 75% 降到 55%。上周设的减仓条件已全部满足：收盘 74,851 跌破 7.5 万，美国现货 BTC ETF 一周净流出约 12.8 亿美元，是 6 月以来最差的一周。宏观上，强劲的就业数据把 12 月加息概率推到约 80%；AI 股暴跌带动风险资产整体去杠杆；民主党拿下两院，监管前景转紧。价格离 200 日均线只剩约 2%，方案 B 的转跌线约 71,000。暂时不降到 50% 以下：杠杆已经大幅出清，情绪处在极度恐惧附近，200 日均线趋势也还没破。",
-    "age_days": 1,
+    "age_days": 2,
     "stale": false
   }
 }

@@ -1,95 +1,94 @@
 {
-  "as_of_close_utc": "2026-11-11",
-  "btc_close_usd": 74015.19,
+  "as_of_close_utc": "2026-11-12",
+  "btc_close_usd": 71460.0,
   "returns": {
-    "7d": -0.0806,
-    "30d": -0.0957,
-    "90d": 0.1658,
-    "365d": -0.2818
+    "7d": -0.0608,
+    "30d": -0.1408,
+    "90d": 0.1335,
+    "365d": -0.297
   },
-  "sma50": 81205.09,
-  "sma200": 73172.86,
-  "pct_vs_sma200": 0.0115,
-  "realized_vol_30d_annualized": 0.351,
-  "drawdown_from_all_time_high": -0.4063,
+  "sma50": 80946.33,
+  "sma200": 73136.87,
+  "pct_vs_sma200": -0.0229,
+  "realized_vol_30d_annualized": 0.3607,
+  "drawdown_from_all_time_high": -0.4268,
   "all_time_high_in_data": 124658.54,
   "trend_rule_mode": "UP",
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 上涨模式",
   "perp_funding": {
     "source": "hyperliquid",
-    "avg_1d_annualized": 0.068,
-    "avg_7d_annualized": 0.1023,
-    "avg_30d_annualized": 0.0976,
+    "avg_1d_annualized": 0.0775,
+    "avg_7d_annualized": 0.0979,
+    "avg_30d_annualized": 0.0977,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 40025.19,
-    "open_interest_usd": 2943732411,
-    "mark_price": 73547.0,
-    "volume_24h_usd": 2510152758
+    "open_interest_btc": 37484.04,
+    "open_interest_usd": 2556148855,
+    "mark_price": 68193.0,
+    "volume_24h_usd": 5443955345
   },
-  "us_3m_tbill": 0.0406,
+  "us_3m_tbill": 0.0412,
   "structured_data": {
     "etf_flows": {
       "source": "bitbo.io",
       "daily_total_musd": [
         {
-          "date": "2026-10-28",
-          "total_musd": 122.8
-        },
-        {
           "date": "2026-10-29",
-          "total_musd": 28.7
+          "total_musd": 26.6
         },
         {
           "date": "2026-10-30",
-          "total_musd": -510.2
+          "total_musd": -472.3
         },
         {
           "date": "2026-11-02",
-          "total_musd": -450.7
+          "total_musd": -417.2
         },
         {
           "date": "2026-11-04",
-          "total_musd": 21.1
+          "total_musd": 19.5
         },
         {
           "date": "2026-11-05",
-          "total_musd": -434.5
+          "total_musd": -402.3
         },
         {
           "date": "2026-11-06",
-          "total_musd": -361.6
+          "total_musd": -334.8
         },
         {
           "date": "2026-11-09",
-          "total_musd": -197.8
+          "total_musd": -183.2
+        },
+        {
+          "date": "2026-11-10",
+          "total_musd": -353.8
+        },
+        {
+          "date": "2026-11-11",
+          "total_musd": 26.3
         }
       ],
-      "sum_last_5_days_musd": -1423.5,
-      "sum_last_10_days_musd": -1782.2
+      "sum_last_5_days_musd": -1247.8,
+      "sum_last_10_days_musd": -2091.2
     },
     "onchain": {
       "source": "coinmetrics community",
-      "as_of": "2026-11-11",
-      "mvrv": 1.37,
-      "mvrv_30d_ago": 1.519,
-      "active_addresses_7d_avg": 670509,
-      "active_addresses_30d_avg": 643106,
+      "as_of": "2026-11-12",
+      "mvrv": 1.324,
+      "mvrv_30d_ago": 1.544,
+      "active_addresses_7d_avg": 662728,
+      "active_addresses_30d_avg": 643923,
       "note": "MVRV = 市值 / 已实现市值；历史上 >3 偏热，<1 是深度低估"
     },
     "stablecoins": {
       "source": "defillama",
-      "total_usd_bn": 289.0,
-      "change_30d_pct": -4.9
+      "total_usd_bn": 287.7,
+      "change_30d_pct": -5.34
     },
     "fear_greed": [
-      {
-        "date": "2026-11-06",
-        "value": 28,
-        "label": "Fear"
-      },
       {
         "date": "2026-11-07",
         "value": 25,
@@ -119,6 +118,11 @@
         "date": "2026-11-12",
         "value": 28,
         "label": "Fear"
+      },
+      {
+        "date": "2026-11-13",
+        "value": 20,
+        "label": "Extreme Fear"
       }
     ]
   }

@@ -1,35 +1,34 @@
-【AI 波段】触发：24 小时 -5.7%，盘中价 75,684
-日期: 2026-11-04   BTC: 80,504   趋势规则: UP
-模型建议仓位: 75%（采样 [75]）   置信度: medium
-执行仓位: 75%（上次 75%）
-判断: 维持 75%，不追跌减仓也不抄底加仓。这次下跌的主因在加密市场外部：美股芯片股暴跌，叠加多头杠杆被集中清算。200 日均线上涨趋势还没被破坏，杠杆也已大幅出清；但宏观偏鹰、ETF 持续流出，所以也不加仓。
+【AI 波段】触发：24 小时 -7.2%、72 小时 -8.6%，盘中价 68,162
+日期: 2026-11-12   BTC: 71,460   趋势规则: UP
+模型建议仓位: 50%（采样 [50]）   置信度: low
+执行仓位: 50%（上次 75%）
+判断: 从 75% 降到 50%，不加杠杆。价格已跌到约 68,200，比 200 日均线（73,137）低约 6.8%，跌破 3% 缓冲带，趋势规则很可能转为下跌模式。宏观偏鹰、ETF 持续流出、AI 龙头 CEO 突然辞职，这几个独立利空同时出现。但多头杠杆已大幅出清，情绪进入极度恐惧，所以先降到 50%，暂不清仓。
 主要依据:
-  [neutral/high] 价格仍在 200 日均线上方，但余量收窄：盘中约 75,684 美元，比 200 日均线 73,231 高约 3.3%；趋势规则仍为上涨模式，要跌破约 71,000（均线 -3%）才会转为下跌模式。7.5–7.56 万美元是 8 月以来多次守住的支撑（Bitcoin Magazine、CryptoTicker，2026-11-05）。
-  [bearish/medium] ETF 连续流出，11 月 4 日小幅转正：10/30 流出 -695 百万美元，11/2 流出 -494 百万；11/3 约 -116 百万；11/4 净流入 +74.6 百万，但 IBIT 流出 -201 百万，已连续 4 天共流出约 9.35 亿。5 日累计净流出约 10.7 亿美元，是 7 月 1 日以来最大（SoSoValue、Cryptopolitan、bitbo）。
-  [bullish/medium] 多头杠杆被集中清算，资金费率不拥挤：11/5 一小时内价格从 78,767 跌到 75,986，多头爆仓超过 5.6 亿美元（CryptoTicker）。Hyperliquid 资金费率 1 日年化 6.6%、7 日 10.0%，都在约 11% 的基准以下，杠杆已明显出清，短期继续踩踏的燃料减少。
-  [neutral/low] MVRV 中性偏低，活跃地址回升，稳定币收缩：MVRV 1.49（30 天前 1.60），不过热，也未到低估区；7 日平均活跃地址 66.5 万，高于 30 日平均 63.4 万；稳定币总量 2,946 亿美元，30 天 -4.3%，增量资金偏弱（Coinmetrics、DefiLlama，截至 11/4）。
-  [bearish/high] 宏观偏鹰，美股科技股大跌：美联储 10/28 维持 3.75%–4.00%（10:2，两票主张加息）；12/9 加息概率从约 85% 降到预测市场的约 66%。10 年期美债约 5.0%。11/5 纳指一度 -3.8%，费城半导体指数 SOX -9% 以上，芯片股市值蒸发约 2 万亿美元。初请失业金 18.9 万，降低了宽松预期。周五还有非农和期权到期（CNN、Yahoo Finance、CryptoTicker）。
-  [bearish/medium] 中期选举结果和币安被盗的余波：民主党在 11/3 中期选举中明显获胜。11/4 市场曾借此反弹到 8 万美元以上，11/5 又因对 AI 投资和监管的担忧全部回吐。上周 63 亿美元的币安被盗事件，加上 Clarity Act 的不确定性，仍压制风险偏好（Yahoo Finance，经 CryptoTicker 转述，2026-11-05）。
-  [neutral/low] 情绪从恐惧回到中性后再次转弱：恐惧与贪婪指数：11/3 为 26，11/5 为 50（大跌前）；全市场市值单日 -6% 到约 2.58 万亿美元，BTC 占比 59.1%，山寨币跌得更多。情绪没有极端，不构成反向买点。
+  [bearish/high] 价格跌破 200 日均线缓冲带：11-12 收盘 71,460（比 200 日均线低 2.3%，规则仍是上涨模式）；11-13 盘中约 68,162，比 200 日均线 73,137 低约 6.8%，若收盘维持将转为下跌模式。50 日均线 80,946，30 日 -14.1%，距历史高点回撤约 45%。上周设的 7.1 万转跌线已跌破。
+  [bearish/high] 现货 ETF 持续净流出：bitbo：最近 5 个交易日合计 -12.48 亿美元，10 日 -20.91 亿美元；11-11 仅小幅 +2,630 万。Farside（据 crypto.news）11-11 为 -2.998 亿美元（IBIT -2.697 亿），连续五个交易日约 -14.4 亿美元。两个数据源对 11-11 的净流向不一致。
+  [bullish/medium] 多头集中爆仓，杠杆已出清：CoinGlass（CoinDesk/crypto.news，11-13）：24 小时全市场爆仓约 12.3–13 亿美元，BTC 约 6.77 亿，其中多头 6.535 亿（占 96%）；跌破 7 万时单笔爆掉约 5 亿；Hyperliquid 最大单笔多头 3,109 万美元。Hyperliquid 资金费率 1 日年化 7.75%，低于约 11% 的基准，说明多头不拥挤；未平仓合约 3.75 万 BTC（约 25.6 亿美元）。
+  [neutral/medium] MVRV 回落但未到低估区：coinmetrics 11-12：MVRV 1.324（30 天前 1.544），离历史深度低估的 <1 还有距离；7 日活跃地址 66.3 万，略高于 30 日均值 64.4 万。DefiLlama 稳定币总量 2,877 亿美元，30 天 -5.3%，场外资金在流出。
+  [bearish/high] 通胀偏热，美元走强，12 月加息几乎确定：10 月 CPI（11-10 公布）环比 +0.4%，核心 +0.3%，均高于预期的 0.3%/0.2%。CME FedWatch：12 月 8–9 日会议加息 25bp 概率约 85%，加息 50bp 升到约 15%（发布前约 1.4%）。美元指数升破 103，为 19 个月新高（CoinDesk 11-13）。3 个月美债利率 4.12%。
+  [bearish/medium] 英伟达 CEO 黄仁勋辞职，MSCI 将剔除 Strategy：英伟达 8-K（2026-11-12）：黄仁勋辞去总裁、CEO 和董事职务，即日生效，CFO Colette Kress 暂代 CEO，此前董事会正在调查其涉嫌与中国间谍有关的问题，引发科技股抛售。crypto.news 称 MSCI 计划在 11-30 后把 Strategy 移出指数，被动基金可能被迫卖出。CoinDesk 提到中东局势再度升级（IRGC 称摧毁美军在巴林的预警雷达），但我只查到 7 月的同类报道，11 月的说法未能独立证实。
+  [bullish/low] 情绪进入极度恐惧：恐惧与贪婪指数 11-13 为 20（极度恐惧），一周内从 32 回落。新闻主流叙事是“去杠杆 + 宏观收紧”。逆向看偏多，但在趋势转跌时，单靠情绪不足以支撑抄底。
 主要风险:
-  - 美股科技股继续下跌，跌破 7.5 万美元后可能下探 7.3 万（200 日均线），甚至约 7.1 万（转为下跌模式）
-  - 周五非农超预期强、10 年期美债突破 5.1%，会强化 12 月加息预期
-  - IBIT 持续大额流出，ETF 买盘撑不住
-  - 币安被盗事件出现新的偿付或安全问题
+  - 降仓后若是急跌后的 V 形反弹（多头已大幅出清、情绪极度恐惧），会少赚一段反弹
+  - 若 12 月加息 50bp 或美元继续走强，可能下探 6.5 万甚至更低，50% 仓位仍会承受明显回撤
+  - MSCI 剔除 Strategy 在 11-30 后生效，可能带来被动卖盘和市场对其抛币的担忧
+  - 科技股继续因英伟达管理层动荡下跌，拖累风险资产
+  - 中东冲突若真实升级，可能推高油价和通胀预期
 改变决定的条件:
-  - 日线收盘低于 73,000（200 日均线）并且 ETF 继续净流出：降到 50%–60%
-  - 跌破约 71,000、趋势转为下跌模式：降到 40% 以下
-  - 重新站上 80,000，且 ETF 连续 3 天以上净流入：回到 85%
-  - 非农或 CPI 明显转弱、12 月加息概率降到 50% 以下：考虑加回 85%
-建议 3 天后重新评估
+  - 收盘重新站回 200 日均线（约 73,000）上方并保持 3 天，且 ETF 转为连续净流入：回到 65–75%
+  - 收盘跌破 65,000，或 ETF 单周净流出再超 10 亿美元：降到 35–40%
+  - 12 月 8–9 日议息会议加息 50bp 或给出更鹰派的指引：再降 10–15 个百分点
+  - MVRV 跌破 1.1 且资金费率转负、恐惧贪婪指数低于 15：考虑分批加回 10 个百分点
+建议 7 天后重新评估
 本次由 Claude Code 定时任务决策（使用订阅额度，无 API 费用）
-护栏调整:
-  ! 变化 +0 个百分点小于 10，维持 75%
 参考来源:
-  - Bitcoin falls below $77,000 as chip stocks crash (CryptoTicker, 2026-11-05) https://cryptoticker.io/en/bitcoin-falls-below-77000-chip-selloff-liquidations/
-  - Bitcoin Price Crashes Over 5% as Tech Rout Wipes Out Leveraged Longs (Bitcoin Magazine) https://bitcoinmagazine.com/markets/bitcoin-price-drops-below-75000-tech
-  - Fidelity's $237M offsets BlackRock's IBIT exit as bitcoin ETFs end losing streak https://www.cryptopolitan.com/fidelity-237m-ibit-bitcoin-etfs-end-streak/
-  - US Spot Bitcoin ETFs See $74.61 Million in Net Inflows (Bloomingbit) https://en.bloomingbit.io/feed/news/123711
-  - Fed keeps interest rates unchanged, two officials dissented (CNN, 2026-10-28) https://www.cnn.com/2026/10/28/business/live-news/federal-reserve-interest-rate-october
-  - Fed Holds Rates at 3.75% to 4% in a 10 to 2 Vote (Vizaca) https://www.vizaca.com/business/fed-holds-rates-october-2026/
-  - What November 3 means for the Fed and the US dollar's rate path (FXStreet) https://www.fxstreet.com/analysis/what-november-3-means-for-the-fed-and-the-us-dollars-rate-path-202610211319
+  - CoinDesk: Bitcoin dips below $70,000 as Dollar Index hits 19-month high (2026-11-13) https://www.coindesk.com/markets/2026/11/13/bitcoin-dips-below-usd70-000-as-selloff-gathers-pace
+  - crypto.news: Bitcoin price crashes below $70K as crypto liquidations hit $1.2B https://crypto.news/bitcoin-price-crash-below-70000-nvidia-liquidations/
+  - NVIDIA Form 8-K: CEO transition (2026-11-12) https://www.sec.gov/Archives/edgar/data/0001045810/000104581026000082/nvidiaannouncesceotransiti.htm
+  - InvestmentNews: October CPI comes in hot, raising odds of a bigger December rate hike https://www.investmentnews.com/equities/october-cpi-comes-in-hot-raising-odds-of-a-bigger-than-expected-rate-hike/268961
+  - RISMedia: Inflation hotter than expectations (2026-11-10) https://www.rismedia.com/2026/11/10/inflation-hotter-than-economist-expectations-raising-odds-of-2027-rate-hikes/
+  - cryptoticker: Bitcoin below $70,000, $1.3bn in liquidations https://cryptoticker.io/en/bitcoin-price-below-70000-liquidations-extreme-fear/
+  - IBTimes: Jensen Huang alleged spy ties put Nvidia under scrutiny https://www.ibtimes.com/nvidia-jensen-huang-succession-plan-investigation-3809602

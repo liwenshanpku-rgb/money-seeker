@@ -17,17 +17,17 @@
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 上涨模式",
   "perp_funding": {
     "source": "hyperliquid",
-    "avg_1d_annualized": 0.0775,
-    "avg_7d_annualized": 0.0979,
+    "avg_1d_annualized": 0.0755,
+    "avg_7d_annualized": 0.0975,
     "avg_30d_annualized": 0.0977,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 37484.04,
-    "open_interest_usd": 2556148855,
-    "mark_price": 68193.0,
-    "volume_24h_usd": 5443955345
+    "open_interest_btc": 37479.39,
+    "open_interest_usd": 2591625042,
+    "mark_price": 69148.0,
+    "volume_24h_usd": 5685926124
   },
   "us_3m_tbill": 0.0412,
   "structured_data": {
@@ -36,43 +36,43 @@
       "daily_total_musd": [
         {
           "date": "2026-10-29",
-          "total_musd": 26.6
+          "total_musd": 27.0
         },
         {
           "date": "2026-10-30",
-          "total_musd": -472.3
+          "total_musd": -479.7
         },
         {
           "date": "2026-11-02",
-          "total_musd": -417.2
+          "total_musd": -423.7
         },
         {
           "date": "2026-11-04",
-          "total_musd": 19.5
+          "total_musd": 19.8
         },
         {
           "date": "2026-11-05",
-          "total_musd": -402.3
+          "total_musd": -408.6
         },
         {
           "date": "2026-11-06",
-          "total_musd": -334.8
+          "total_musd": -340.0
         },
         {
           "date": "2026-11-09",
-          "total_musd": -183.2
+          "total_musd": -186.0
         },
         {
           "date": "2026-11-10",
-          "total_musd": -353.8
+          "total_musd": -359.3
         },
         {
           "date": "2026-11-11",
-          "total_musd": 26.3
+          "total_musd": 26.7
         }
       ],
-      "sum_last_5_days_musd": -1247.8,
-      "sum_last_10_days_musd": -2091.2
+      "sum_last_5_days_musd": -1267.2,
+      "sum_last_10_days_musd": -2123.8
     },
     "onchain": {
       "source": "coinmetrics community",

@@ -17,17 +17,17 @@
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 下跌模式",
   "perp_funding": {
     "source": "hyperliquid",
-    "avg_1d_annualized": 0.0853,
-    "avg_7d_annualized": 0.0809,
-    "avg_30d_annualized": 0.0949,
+    "avg_1d_annualized": 0.0706,
+    "avg_7d_annualized": 0.0788,
+    "avg_30d_annualized": 0.0944,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 36970.23,
-    "open_interest_usd": 2381843910,
-    "mark_price": 64426.0,
-    "volume_24h_usd": 3060165981
+    "open_interest_btc": 36725.8,
+    "open_interest_usd": 2362460358,
+    "mark_price": 64327.0,
+    "volume_24h_usd": 2767831610
   },
   "us_3m_tbill": 0.0414,
   "structured_data": {
@@ -40,7 +40,7 @@
         },
         {
           "date": "2026-11-02",
-          "total_musd": -397.9
+          "total_musd": -397.2
         },
         {
           "date": "2026-11-04",
@@ -48,27 +48,27 @@
         },
         {
           "date": "2026-11-05",
-          "total_musd": -380.9
+          "total_musd": -380.3
         },
         {
           "date": "2026-11-06",
-          "total_musd": -317.0
+          "total_musd": -316.5
         },
         {
           "date": "2026-11-09",
-          "total_musd": -173.4
+          "total_musd": -173.1
         },
         {
           "date": "2026-11-10",
-          "total_musd": -335.0
+          "total_musd": -334.4
         },
         {
           "date": "2026-11-11",
           "total_musd": 24.9
         }
       ],
-      "sum_last_5_days_musd": -1181.4,
-      "sum_last_10_days_musd": -1560.9
+      "sum_last_5_days_musd": -1179.4,
+      "sum_last_10_days_musd": -1558.2
     },
     "onchain": {
       "source": "coinmetrics community",

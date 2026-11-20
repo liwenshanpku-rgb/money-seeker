@@ -1,32 +1,39 @@
-【AI 波段】触发：24 小时 -6.3%、72 小时 -13.5%，盘中价 63,974
-日期: 2026-11-14   BTC: 64,150   趋势规则: DOWN
-模型建议仓位: 40%（采样 [40]）   置信度: low
-执行仓位: 40%（上次 50%）
-判断: 从 50% 降到 40%，不加杠杆。11-14 收盘 64,150，跌破上次设好的 65,000 减仓线，趋势规则也已正式转为下跌模式（比 200 日均线低 12.2%）。但多头杠杆已连续两轮出清、情绪到了极度恐惧 10，没看到巨鲸抛售，所以按预案取 35–40% 的上沿，不再继续追跌。
+【AI 波段】触发：24 小时 -6.1%，盘中价 58,949
+日期: 2026-11-19   BTC: 61,987   趋势规则: DOWN
+模型建议仓位: 35%（采样 [35]）   置信度: low
+执行仓位: 40%（上次 40%）
+判断: 从 40% 小幅降到 35%，不清仓也不抄底。价格跌破 6 万、离 7 月低点 57,718 只差约 2%，下跌趋势、ETF 流出和偏鹰的宏观仍在；但 MVRV 只有 1.16、情绪极度恐惧、杠杆连续出清，继续追跌的边际收益在下降。
 主要依据:
-  [bearish/high] 趋势规则转为下跌模式：11-14 收盘 64,150，比 200 日均线 73,031 低 12.2%，规则为 DOWN；50 日均线 80,225；7 日 -15.4%、30 日 -22.0%，距历史高点回撤 48.5%。盘中约 63,974，跌破上次设的 65,000 减仓线。Cointribune 列出的支撑约 64,000，阻力 70,815 / 72,775。
-  [bearish/high] 现货 ETF 持续净流出：bitbo：最近 5 个交易日合计 -11.75 亿美元，10 日 -15.52 亿美元（数据截至 11-11）。Cointribune：11-5 至 11-12 连续六个交易日净流出约 14.9 亿美元；Yahoo 报道上周净流出 10.7 亿美元。
-  [bullish/medium] 多头再遭清算，杠杆进一步出清：11-14 周六单日爆仓超 5 亿美元，94% 是多头；跌破 66,000 时一小时爆仓约 2 亿（Ted Pillows，经 KuCoin/CryptoPotato）。Hyperliquid 资金费率 1 日年化降到 4.45%，远低于约 11% 的基准；未平仓合约 3.69 万 BTC，比两天前的 3.75 万略降。
-  [neutral/medium] MVRV 继续下降，稳定币缩水：coinmetrics 11-13：MVRV 1.267（30 天前 1.514），仍高于历史深度低估的 1。DefiLlama 稳定币总量 2,870 亿美元，30 天 -5.4%；分析师 Crypto Rover 称这一轮下跌中稳定币供应减少近 90 亿美元（约 -4.9%），没有点名任何稳定币脱锚。据报道没看到 5,000 万美元以上的巨鲸抛售或大额交易所充值。
-  [bearish/high] 12 月加息几乎确定，美元强势：Cointribune（截至 11-13）：12 月 8–9 日会议加息 25bp 概率 91.9%、加息 50bp 8.1%；联储理事 Waller 称核心通胀月增 0.3% 以上就该考虑加息 50bp，10 月核心 CPI 正好 +0.3%。美元指数在 103 以上，为 2025 年 4 月以来最高。3 个月美债利率 4.14%。
-  [bearish/low] 近期事件：没有新的单一导火索，后续日程密集：CryptoPotato 称周末下跌没有新的战争等突发事件。已知的后续事件：11-18 美联储 10 月会议纪要，11-25 PCE 数据，11-30 后 MSCI 剔除 Strategy 生效，12-8/9 议息会议。英伟达 CEO 在 11-12 辞职后，对科技股的影响仍在消化。
-  [bullish/medium] 情绪极度恐惧，已到历史低位区：恐惧与贪婪指数 11-13 为 20、11-14 为 13、11-15 为 10。RSI 25.4，处于超卖（Cointribune）。部分分析师认为可能反弹，也有人看 6 万。逆向指标偏多，但趋势转跌时只能作为不再追跌的理由。
+  [bearish/high] 价格趋势：11-20 盘中约 58,949，24h 跌 6.1%，比上次波段决定（11-15）又跌 7.9%；11-19 收盘 61,987，比 200 日均线 72,694 低 14.7%，50 日均线 78,236 仍在 200 日均线上方但在下拐，趋势规则为下跌模式。创 7 月以来新低，下一支撑是 7 月 1 日低点约 57,718（invezz、Bitcoin Magazine，11-20）。
+  [bearish/medium] 现货 ETF 资金流：bitbo：近 10 个交易日净流出 11.76 亿美元，近 5 日净流出 3.42 亿美元；11-18 小幅流入 6,220 万，11-19 流出 1,750 万。有报道称 IBIT 单日流出 5.41 亿美元，但未能核实具体日期，不作为主要依据。
+  [neutral/medium] 衍生品杠杆：11-20 全网清算超过 7 亿美元（媒体报道）；Hyperliquid 资金费率 1 日年化 5.4%，7 日年化 7.6%，低于约 11% 的基准，多头不拥挤；未平仓约 3.9 万 BTC（24 亿美元）。11 月中旬 Binance 未平仓下降 17%，资金费率一度转负（Blockworks、Blockonomi）。杠杆在持续出清，但还没看到空头被逼空的迹象。
+  [bullish/medium] 链上估值与持有者行为：MVRV 1.159（30 天前 1.538），接近历史上 <1 的深度低估区；活跃地址 7 日均值 66.2 万，略高于 30 日均值。不利的一面：Glassnode 第 45 周的数据显示，持有超过 1 万 BTC 的巨鲸在派发，持有 100–10,000 BTC 的钱包在买入；长期持有者卖出以亏损为主，获利了结基本消失。
+  [bearish/low] 稳定币供应：DefiLlama：稳定币总供应 2,836 亿美元，30 天下降 5.9%，场内购买力在收缩。
+  [bearish/medium] 美联储与美元：12 月加息概率约 80% 以上，已基本被定价（FXStreet 11-12、Investing）；美元指数在 4 月以来高位附近，10 年期美债约 5%，3 个月国债 4.16%。现金的机会成本高，对风险资产不利。
+  [bearish/medium] AI 股抛售与资金抽离：11-20 下跌被归因于 AI 资本开支担忧带动科技股下跌，以及大型 AI 公司 IPO 前投资者卖出风险资产筹钱（aroundprague/TradingView、coingape 报道）。属于外部流动性冲击，可能还会发酵 1–2 周。
+  [neutral/low] 监管与安全事件：未能获取本周（11-16 至 11-20）的重大监管新闻。较早的背景：9 月 CLARITY Act 在参议院以 50 比 49 未通过；11 月初 Binance 发生 63 亿美元的安全事件（Troutman 11-06 简报）。
+  [bullish/low] 市场情绪：恐惧与贪婪指数 11-14 至 11-20 一直在 10–13，处于极度恐惧；这在逆向指标上偏正面，但下跌趋势里可以持续数周。
 主要风险:
-  - 极度恐惧 + 超卖后若出现急速反弹，40% 仓位会少赚
-  - 11-18 会议纪要或 11-25 PCE 偏鹰，推高 12 月加息 50bp 的预期，可能下探 6 万或 6 月低点 5.9 万
-  - ETF 继续每周流出 10 亿美元以上，买盘持续缺位
-  - 11-30 后 MSCI 剔除 Strategy，可能带来被动卖盘或市场对其抛币的担忧
+  - 收盘跌破 7 月低点约 57,700 后，可能加速下探 52,000–55,000
+  - AI 股继续下跌、IPO 抽走流动性，美股和加密资产一起去杠杆
+  - 12 月 FOMC 加息并给出偏鹰的指引，美元和美债收益率继续上行
+  - 巨鲸持续向交易所派发，ETF 流出重新放大到单周 10 亿美元以上
+  - 反向风险：在 MVRV 约 1.16、情绪极度恐惧的位置，低仓位可能错过急速反弹
 改变决定的条件:
-  - 收盘跌破 59,000（6 月低点）或 ETF 单周再流出超 10 亿美元：降到 25–30%
-  - 收盘重新站上 70,800 并保持 3 天，且 ETF 转为净流入：回到 50–55%
-  - 收盘重回 200 日均线（约 73,000）上方 3% 以外，趋势规则转回上涨：回到 65–75%
-  - MVRV 跌破 1.1、资金费率转负且恐惧贪婪低于 10 持续数天：考虑分批加回 10 个百分点
-建议 7 天后重新评估
+  - 日收盘跌破 57,000 且 ETF 单周净流出超过 10 亿美元：降到 25%–30%
+  - 收复 65,000 并站稳 3 天，同时 ETF 连续 3 天净流入：回到 45%–50%
+  - MVRV 跌破 1.0 且资金费率转负、恐惧与贪婪指数低于 10：考虑分批加回到 45%
+  - 12 月 FOMC 意外不加息或转鸽：重新评估并上调仓位
+建议 3 天后重新评估
 本次由 Claude Code 定时任务决策（使用订阅额度，无 API 费用）
+护栏调整:
+  ! 变化 -5 个百分点小于 10，维持 40%
 参考来源:
-  - Yahoo Finance: Bitcoin Drops Below $65,000, Extending Weeklong Slide https://finance.yahoo.com/markets/crypto/articles/bitcoin-drops-below-65-000-212800178.html
-  - KuCoin/CryptoPotato: Bitcoin Plunges to $65K Amid Leverage Liquidations and Stablecoin Wipeout (2026-11-14) https://www.kucoin.com/news/flash/bitcoin-plunges-to-65k-amid-leverage-liquidations-and-stablecoin-wipeout
-  - Cointribune: Bitcoin Drops To $65,900 As Fed Tightening Risks Grow https://www.cointribune.com/en/bitcoin-drops-to-65900-as-fed-tightening-risks-grow/
-  - Trending Topics: Bitcoin Slides to $65,000 as $1 Billion in Bets Are Liquidated https://www.trendingtopics.eu/bitcoin-65000-dollars-liquidations/
-  - Cointelegraph: Bitcoin ETF outflows persist while equity investors buy the dip https://cointelegraph.com/markets/bitcoin-etf-outflows-persist-while-equity-investors-buy-the-dip
-  - NVIDIA Form 8-K: CEO transition (2026-11-12) https://www.sec.gov/Archives/edgar/data/0001045810/000104581026000082/nvidiaannouncesceotransiti.htm
+  - Bitcoin price today: BTC falls below $60,000 for first time since July (invezz, 2026-11-20) https://invezz.com/news/2026/11/20/bitcoin-price-today-falls-below-60000/
+  - Bitcoin Price Crashes Below $60,000 As Selloff Deepens (Bitcoin Magazine) https://bitcoinmagazine.com/markets/bitcoin-price-crashes-below-60000
+  - Why Is Bitcoin Down Today? AI Worries Hit Markets https://aroundprague.cz/en/news/us/why-is-bitcoin-down-today-btc-falls-5-28-to-59-707-as-ai-worries-hit-markets
+  - Top 4 Reasons Why BTC, ETH and XRP Price Are Crashing Today (CoinGape) https://coingape.com/markets/top-4-reasons-why-btc-eth-and-xrp-price-are-crashing-today/
+  - Crypto sell-off: open interest and funding (Blockworks) https://blockworks.com/news/crypto-sell-off-open-interest-funding
+  - Bitcoin Open Interest Falls 17% as Binance Liquidations Reach Highest Since 2021 https://pro.edgex.exchange/en-US/news/article/bitcoin-open-interest-falls-17-binance-liquidations
+  - Bitcoin Whales Cut Holdings While Mid-Sized Wallets Accumulate (Glassnode data) https://pro.edgex.exchange/en-US/news/article/bitcoin-whales-sell-mid-sized-holders-buy-glassnode
+  - Markets priced in the December rate hike with tremendous vigor (FXStreet, 2026-11-12) https://www.fxstreet.com/analysis/markets-priced-in-the-december-rate-hike-with-tremendous-vigor-202611121354

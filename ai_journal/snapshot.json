@@ -17,17 +17,17 @@
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 下跌模式",
   "perp_funding": {
     "source": "hyperliquid",
-    "avg_1d_annualized": 0.006,
+    "avg_1d_annualized": 0.0079,
     "avg_7d_annualized": 0.067,
-    "avg_30d_annualized": 0.0917,
+    "avg_30d_annualized": 0.0916,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 36432.16,
-    "open_interest_usd": 2031420995,
-    "mark_price": 55759.0,
-    "volume_24h_usd": 6752917191
+    "open_interest_btc": 36377.04,
+    "open_interest_usd": 2116900094,
+    "mark_price": 58193.3,
+    "volume_24h_usd": 7341775068
   },
   "us_3m_tbill": 0.0416,
   "structured_data": {
@@ -36,47 +36,47 @@
       "daily_total_musd": [
         {
           "date": "2026-11-06",
-          "total_musd": -274.3
+          "total_musd": -286.2
         },
         {
           "date": "2026-11-09",
-          "total_musd": -166.5
+          "total_musd": -173.7
         },
         {
           "date": "2026-11-10",
-          "total_musd": -289.8
+          "total_musd": -302.3
         },
         {
           "date": "2026-11-11",
-          "total_musd": 21.6
+          "total_musd": 22.5
         },
         {
           "date": "2026-11-12",
-          "total_musd": -46.0
+          "total_musd": -48.0
         },
         {
           "date": "2026-11-13",
-          "total_musd": -155.9
+          "total_musd": -162.6
         },
         {
           "date": "2026-11-16",
-          "total_musd": -56.8
+          "total_musd": -59.3
         },
         {
           "date": "2026-11-17",
-          "total_musd": -137.8
+          "total_musd": -143.7
         },
         {
           "date": "2026-11-18",
-          "total_musd": 56.4
+          "total_musd": 58.8
         },
         {
           "date": "2026-11-19",
-          "total_musd": -15.8
+          "total_musd": -16.5
         }
       ],
-      "sum_last_5_days_musd": -309.9,
-      "sum_last_10_days_musd": -1064.9
+      "sum_last_5_days_musd": -323.3,
+      "sum_last_10_days_musd": -1111.0
     },
     "onchain": {
       "source": "coinmetrics community",
@@ -90,7 +90,7 @@
     "stablecoins": {
       "source": "defillama",
       "total_usd_bn": 282.6,
-      "change_30d_pct": -6.29
+      "change_30d_pct": -6.3
     },
     "fear_greed": [
       {

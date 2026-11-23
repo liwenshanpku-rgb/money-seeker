@@ -17,17 +17,17 @@
   "trend_rule_note": "200 日均线 ±3% 缓冲规则当前为 下跌模式",
   "perp_funding": {
     "source": "hyperliquid",
-    "avg_1d_annualized": 0.0022,
-    "avg_7d_annualized": 0.0493,
+    "avg_1d_annualized": 0.0481,
+    "avg_7d_annualized": 0.0507,
     "avg_30d_annualized": 0.0854,
     "note": "两家交易所的资金费率公式都含每 8 小时 0.01% 的利率基准（年化约 11%）；长期低于它说明多头不拥挤，明显高于它说明多头拥挤"
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 38320.8,
-    "open_interest_usd": 2339178112,
-    "mark_price": 61042.0,
-    "volume_24h_usd": 3675400800
+    "open_interest_btc": 37387.13,
+    "open_interest_usd": 2287681056,
+    "mark_price": 61189.0,
+    "volume_24h_usd": 3977495763
   },
   "us_3m_tbill": 0.0416,
   "structured_data": {
@@ -40,51 +40,57 @@
         },
         {
           "date": "2026-11-09",
-          "total_musd": -173.9
+          "total_musd": -175.2
         },
         {
           "date": "2026-11-10",
-          "total_musd": -316.7
+          "total_musd": -319.2
         },
         {
           "date": "2026-11-11",
-          "total_musd": 23.6
+          "total_musd": 23.7
         },
         {
           "date": "2026-11-12",
-          "total_musd": -27.8
+          "total_musd": -28.0
         },
         {
           "date": "2026-11-13",
-          "total_musd": -170.4
+          "total_musd": -171.7
         },
         {
           "date": "2026-11-16",
-          "total_musd": -58.6
+          "total_musd": -59.0
         },
         {
           "date": "2026-11-17",
-          "total_musd": -144.5
+          "total_musd": -145.6
         },
         {
           "date": "2026-11-18",
-          "total_musd": 61.6
+          "total_musd": 62.1
         },
         {
           "date": "2026-11-19",
-          "total_musd": -17.3
+          "total_musd": -17.4
         }
       ],
-      "sum_last_5_days_musd": -329.2,
-      "sum_last_10_days_musd": -824.0
+      "sum_last_5_days_musd": -331.6,
+      "sum_last_10_days_musd": -830.3
     },
     "onchain": {
-      "error": "HTTPSConnectionPool(host='community-api.coinmetrics.io', port=443): Read timed out. (read timeout=20.0)"
+      "source": "coinmetrics community",
+      "as_of": "2026-11-22",
+      "mvrv": 1.148,
+      "mvrv_30d_ago": 1.497,
+      "active_addresses_7d_avg": 680142,
+      "active_addresses_30d_avg": 654549,
+      "note": "MVRV = 市值 / 已实现市值；历史上 >3 偏热，<1 是深度低估"
     },
     "stablecoins": {
       "source": "defillama",
       "total_usd_bn": 282.7,
-      "change_30d_pct": -5.99
+      "change_30d_pct": -5.98
     },
     "fear_greed": [
       {

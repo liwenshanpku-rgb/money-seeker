@@ -24,10 +24,10 @@
   },
   "perp_open_interest": {
     "source": "hyperliquid",
-    "open_interest_btc": 38308.98,
-    "open_interest_usd": 2339759366,
-    "mark_price": 61076.0,
-    "volume_24h_usd": 3672079203
+    "open_interest_btc": 38320.8,
+    "open_interest_usd": 2339178112,
+    "mark_price": 61042.0,
+    "volume_24h_usd": 3675400800
   },
   "us_3m_tbill": 0.0416,
   "structured_data": {

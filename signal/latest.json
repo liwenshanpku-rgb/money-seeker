@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-23T10:50:16+00:00",
-  "as_of_close_utc": "2026-11-22",
-  "price": 61170.1,
+  "generated_at": "2026-11-24T10:26:54+00:00",
+  "as_of_close_utc": "2026-11-23",
+  "price": 61214.3,
   "price_source": "kraken XBTUSD 1d",
   "plan_b": {
     "mode": "DOWN",
     "mode_since": "2026-11-13",
     "switched_today": false,
     "target_pct": 50.0,
-    "sma": 72326.32,
-    "upper": 74496.11,
-    "lower": 70156.53,
-    "distance_to_switch": 0.217852,
+    "sma": 72232.33,
+    "upper": 74399.3,
+    "lower": 70065.36,
+    "distance_to_switch": 0.215391,
     "params": {
       "core": 0.5,
       "sma_days": 200,
@@ -29,7 +29,7 @@
     "decided_at": "2026-11-23T01:16:02+00:00",
     "confidence": "medium",
     "stance": "从 35% 降到 25%。上周设的条件已经触发：11/20 收盘 58,799 跌破 6 万，当周 ETF 净流出约 12.5 亿美元，连续第三周超过 10 亿。宏观和风险资产都很弱：纳指一周跌约 10%，AI 板块大跌，12 月加息还在讨论是 25 还是 50 个基点。MSCI 将在 11/30 把 Strategy 移出指数，可能带来被动卖盘。暂时不降到 20% 以下：恐惧贪婪指数已经连续一周在 10–12，资金费率接近零，11/21 探到 55,100 后有空头回补，短线超卖明显。",
-    "age_days": 1,
+    "age_days": 2,
     "stale": false
   }
 }
